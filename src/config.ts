@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { SECRET_KEYS, endpointSecretKey, readApiKey } from './keys';
 
 export interface ModelCost {
 	/** 输入价格（¥/1M tokens，缓存未命中） */
@@ -29,31 +30,113 @@ export interface ModelConfig {
 	cost?: ModelCost;
 }
 
-/** 极简供应商配置：朋友只需要填 key。 */
+/** 自定义 OpenAI 兼容端点。 */
+export interface CustomEndpoint {
+	/** 端点唯一 id（用于在 SecretStorage 中关联 apiKey）。 */
+	id: string;
+	/** 显示名称。 */
+	name: string;
+	baseUrl: string;
+	/** 解析后的 apiKey（来自 SecretStorage 或配置内联；本地端点可为空）。 */
+	apiKey: string;
+	model: string;
+	contextWindow: number;
+	toolCalling: boolean;
+	imageInput: boolean;
+}
+
+/** 极简供应商配置：key 存系统钥匙串（SecretStorage），其余存 settings.json。 */
 export interface ProviderSettings {
 	deepseekApiKey: string;
 	mimoApiKey: string;
-	openaiBaseUrl: string;
-	openaiApiKey: string;
-	openaiModel: string;
-	openaiContextWindow: number;
+	endpoints: CustomEndpoint[];
 	deepseekContextWindow: number;
 	mimoContextWindow: number;
 	contextWindow: number;
 }
 
-export function getProviderSettings(): ProviderSettings {
+export async function getProviderSettings(context: vscode.ExtensionContext): Promise<ProviderSettings> {
 	const config = vscode.workspace.getConfiguration('llm-bridge');
+	const deepseekApiKey = await readApiKey(context, SECRET_KEYS.deepseek, 'deepseekApiKey');
+	const mimoApiKey = await readApiKey(context, SECRET_KEYS.mimo, 'mimoApiKey');
+	const endpoints = await parseEndpoints(context, config);
 	return {
-		deepseekApiKey: str(config.get('deepseekApiKey')),
-		mimoApiKey: str(config.get('mimoApiKey')),
-		openaiBaseUrl: str(config.get('openaiBaseUrl')).replace(/\/+$/, ''),
-		openaiApiKey: str(config.get('openaiApiKey')),
-		openaiModel: str(config.get('openaiModel')),
-		openaiContextWindow: num(config.get('openaiContextWindow')),
+		deepseekApiKey,
+		mimoApiKey,
+		endpoints,
 		deepseekContextWindow: num(config.get('deepseekContextWindow')),
 		mimoContextWindow: num(config.get('mimoContextWindow')),
 		contextWindow: num(config.get('contextWindow')),
+	};
+}
+
+async function parseEndpoints(
+	context: vscode.ExtensionContext,
+	config: vscode.WorkspaceConfiguration
+): Promise<CustomEndpoint[]> {
+	const raw = config.get<unknown[]>('endpoints', []);
+	const endpoints: CustomEndpoint[] = [];
+	for (const item of raw) {
+		const ep = normalizeEndpoint(item);
+		if (!ep) {
+			continue;
+		}
+		const secret = await readApiKey(context, endpointSecretKey(ep.id));
+		ep.apiKey = ep.apiKey || secret;
+		endpoints.push(ep);
+	}
+	// 兼容旧版单槽配置：endpoints 为空但 openaiBaseUrl + openaiModel 已填时，自动转换为一个端点
+	if (endpoints.length === 0) {
+		const baseUrl = str(config.get('openaiBaseUrl')).replace(/\/+$/, '');
+		const model = str(config.get('openaiModel'));
+		if (baseUrl && model) {
+			const legacyKey = await readApiKey(context, SECRET_KEYS.openai, 'openaiApiKey');
+			endpoints.push({
+				id: 'legacy-custom',
+				name: '自定义 OpenAI',
+				baseUrl,
+				apiKey: legacyKey,
+				model,
+				contextWindow: num(config.get('openaiContextWindow')),
+				toolCalling: true,
+				imageInput: false,
+			});
+		}
+	}
+	return endpoints;
+}
+
+interface RawEndpoint {
+	id?: unknown;
+	name?: unknown;
+	baseUrl?: unknown;
+	apiKey?: unknown;
+	model?: unknown;
+	contextWindow?: unknown;
+	toolCalling?: unknown;
+	imageInput?: unknown;
+}
+
+function normalizeEndpoint(raw: unknown): CustomEndpoint | null {
+	if (!raw || typeof raw !== 'object') {
+		return null;
+	}
+	const e = raw as RawEndpoint;
+	const baseUrl = str(e.baseUrl).replace(/\/+$/, '');
+	const model = str(e.model);
+	if (!baseUrl || !model) {
+		return null;
+	}
+	const id = str(e.id) || `custom-${baseUrl.replace(/^https?:\/\//, '').replace(/[^a-zA-Z0-9]/g, '-')}`;
+	return {
+		id,
+		name: str(e.name) || model,
+		baseUrl,
+		apiKey: str(e.apiKey),
+		model,
+		contextWindow: num(e.contextWindow),
+		toolCalling: e.toolCalling === undefined ? true : Boolean(e.toolCalling),
+		imageInput: e.imageInput === true,
 	};
 }
 

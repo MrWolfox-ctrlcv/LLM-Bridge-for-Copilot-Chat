@@ -73,22 +73,23 @@ export function buildModels(s: ProviderSettings): ModelConfig[] {
 		);
 	}
 
-	// 自定义端点：baseUrl + model 即可显示，apiKey 可留空（本地端点如 llama.cpp 无需鉴权）
-	if (s.openaiBaseUrl && s.openaiModel) {
-		const ctx = s.openaiContextWindow > 0 ? s.openaiContextWindow : 131072;
+	// 自定义 OpenAI 兼容端点：支持多个（llm-bridge.endpoints 数组），apiKey 可留空（本地端点如 llama.cpp 无需鉴权）
+	for (const ep of s.endpoints) {
+		const ctx = ep.contextWindow > 0 ? ep.contextWindow : 131072;
 		models.push(
 			makeModel({
-				id: 'openai-custom',
-				name: '自定义 OpenAI',
-				baseUrl: s.openaiBaseUrl,
-				apiKey: s.openaiApiKey,
-				model: s.openaiModel,
+				id: `custom-${ep.id}`,
+				name: ep.name,
+				baseUrl: ep.baseUrl,
+				apiKey: ep.apiKey,
+				model: ep.model,
 				thinking: false,
-				imageInput: false,
+				imageInput: ep.imageInput,
 				maxInputTokens: ctx,
 				maxOutputTokens: 8192,
-				detail: `自定义端点 · ${s.openaiModel}`,
+				detail: `${ep.name} · 自定义端点`,
 				sendThinkingParam: false,
+				toolCalling: ep.toolCalling,
 			})
 		);
 	}
@@ -131,13 +132,15 @@ interface ModelArgs {
 	maxOutputTokens: number;
 	detail: string;
 	sendThinkingParam: boolean;
+	/** 覆盖默认工具调用能力（默认 true）。 */
+	toolCalling?: boolean;
 	cost?: ModelCost;
 }
 
 function makeModel(a: ModelArgs): ModelConfig {
 	return {
 		...a,
-		toolCalling: true,
+		toolCalling: a.toolCalling ?? true,
 		contextWindow: a.maxInputTokens,
 	};
 }

@@ -14,6 +14,9 @@ export class LlmBridgeProvider {
 	private readonly onDidChangeEmitter = new vscode.EventEmitter<void>();
 	readonly onDidChangeLanguageModelChatInformation = this.onDidChangeEmitter.event;
 
+	/** 用于读取 SecretStorage 中的 API Key。 */
+	private readonly context: vscode.ExtensionContext;
+
 	/** 自适应 chars-per-token 比率，用于 token 数估算与截断。 */
 	private charsPerToken = 4.0;
 
@@ -21,6 +24,7 @@ export class LlmBridgeProvider {
 	private readonly visionGetter = createVisionDescriberGetter();
 
 	constructor(context: vscode.ExtensionContext) {
+		this.context = context;
 		context.subscriptions.push(this.onDidChangeEmitter);
 	}
 
@@ -34,15 +38,15 @@ export class LlmBridgeProvider {
 		this.visionGetter.reset();
 	}
 
-	private getModels(): ModelConfig[] {
-		return buildModels(getProviderSettings());
+	private async getModels(): Promise<ModelConfig[]> {
+		return buildModels(await getProviderSettings(this.context));
 	}
 
 	async provideLanguageModelChatInformation(
 		_options: vscode.PrepareLanguageModelChatModelOptions,
 		_token: vscode.CancellationToken
 	): Promise<vscode.LanguageModelChatInformation[]> {
-		return this.getModels().map(toChatInfo);
+		return (await this.getModels()).map(toChatInfo);
 	}
 
 	async provideLanguageModelChatResponse(
@@ -52,7 +56,7 @@ export class LlmBridgeProvider {
 		progress: vscode.Progress<vscode.LanguageModelResponsePart>,
 		token: vscode.CancellationToken
 	): Promise<void> {
-		const cfg = this.getModels().find((m) => m.id === model.id);
+		const cfg = (await this.getModels()).find((m) => m.id === model.id);
 		if (!cfg) {
 			throw new Error(
 				`[LLM Bridge] 未找到模型 ${model.id}：请检查对应供应商的 API Key 是否已配置（设置 → 搜索 llm-bridge）`

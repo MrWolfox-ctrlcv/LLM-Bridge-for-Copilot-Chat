@@ -4,9 +4,13 @@ import { buildModels } from './models';
 import { isDeepSeekEndpoint, queryDeepSeekBalance } from './balance';
 import { LlmBridgeProvider } from './provider';
 import { listVisionModelOptions } from './vision';
+import { SECRET_KEYS, endpointSecretKey, migrateLegacyKeys } from './keys';
 
 export function activate(context: vscode.ExtensionContext): void {
 	const provider = new LlmBridgeProvider(context);
+
+	// 一次性迁移：把 settings.json 中的旧 key 迁入系统钥匙串（SecretStorage）
+	void migrateLegacyKeys(context);
 
 	context.subscriptions.push(
 		vscode.lm.registerLanguageModelChatProvider('llm-bridge', provider),
@@ -65,10 +69,10 @@ export function activate(context: vscode.ExtensionContext): void {
 				if (key === undefined) {
 					return;
 				}
-				await config.update('deepseekApiKey', key.trim(), vscode.ConfigurationTarget.Global);
+				await context.secrets.store(SECRET_KEYS.deepseek, key.trim());
 				provider.refreshModelPicker();
 				void vscode.window.showInformationMessage(
-					'[LLM Bridge] DeepSeek 已添加 ✓ 模型选择器 → LLM Bridge → DeepSeek V4 Pro / Flash'
+					'[LLM Bridge] DeepSeek 已添加 ✓（Key 已安全存入系统钥匙串）模型选择器 → LLM Bridge → DeepSeek V4 Pro / Flash'
 				);
 			} else if (picked.preset === 'mimo') {
 				const existing = config.get<string>('mimoApiKey', '');
@@ -87,10 +91,10 @@ export function activate(context: vscode.ExtensionContext): void {
 				if (token === undefined) {
 					return;
 				}
-				await config.update('mimoApiKey', token.trim(), vscode.ConfigurationTarget.Global);
+				await context.secrets.store(SECRET_KEYS.mimo, token.trim());
 				provider.refreshModelPicker();
 				void vscode.window.showInformationMessage(
-					'[LLM Bridge] MiMo 已添加 ✓ 模型选择器 → LLM Bridge → MiMo v2.5 / v2.5 Pro'
+					'[LLM Bridge] MiMo 已添加 ✓（Key 已安全存入系统钥匙串）模型选择器 → LLM Bridge → MiMo v2.5 / v2.5 Pro'
 				);
 			} else {
 				const baseUrl = await vscode.window.showInputBox({
@@ -110,28 +114,51 @@ export function activate(context: vscode.ExtensionContext): void {
 					return;
 				}
 				const apiKey = await vscode.window.showInputBox({
-					title: 'API Key（本地端点可留空）',
+					title: 'API Key（本地端点可留空；云端 Key 将安全存入系统钥匙串）',
 					password: true,
 					ignoreFocusOut: true,
 				});
 				if (apiKey === undefined) {
 					return;
 				}
+				const nameInput = await vscode.window.showInputBox({
+					title: '显示名称（可留空，默认用模型 ID）',
+					placeHolder: model.trim(),
+					ignoreFocusOut: true,
+				});
+				if (nameInput === undefined) {
+					return;
+				}
+				const name = nameInput.trim() || model.trim();
+				const id = `custom-${Date.now().toString(36)}`;
+				const current = config.get<unknown[]>('endpoints', []);
 				await config.update(
-					'openaiBaseUrl',
-					baseUrl.trim().replace(/\/+$/, ''),
+					'endpoints',
+					[
+						...current,
+						{
+							id,
+							name,
+							baseUrl: baseUrl.trim().replace(/\/+$/, ''),
+							model: model.trim(),
+							contextWindow: 0,
+							toolCalling: true,
+							imageInput: false,
+						},
+					],
 					vscode.ConfigurationTarget.Global
 				);
-				await config.update('openaiModel', model.trim(), vscode.ConfigurationTarget.Global);
-				await config.update('openaiApiKey', apiKey.trim(), vscode.ConfigurationTarget.Global);
+				if (apiKey.trim()) {
+					await context.secrets.store(endpointSecretKey(id), apiKey.trim());
+				}
 				provider.refreshModelPicker();
 				void vscode.window.showInformationMessage(
-					'[LLM Bridge] 自定义 OpenAI 已添加 ✓ 模型选择器 → LLM Bridge → 自定义 OpenAI'
+					`[LLM Bridge] 自定义端点「${name}」已添加 ✓ 模型选择器 → LLM Bridge → ${name}`
 				);
 			}
 		}),
 		vscode.commands.registerCommand('llm-bridge.checkBalance', async () => {
-			const deepseekModels = buildModels(getProviderSettings()).filter(isDeepSeekEndpoint);
+			const deepseekModels = buildModels(await getProviderSettings(context)).filter(isDeepSeekEndpoint);
 			if (deepseekModels.length === 0) {
 				void vscode.window.showInformationMessage('[LLM Bridge] 未配置 DeepSeek（llm-bridge.deepseekApiKey 为空），无法查询余额。');
 				return;
