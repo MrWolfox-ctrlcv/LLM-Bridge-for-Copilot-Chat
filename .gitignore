@@ -1,0 +1,10 @@
+# 私有文档（开发日志/朋友迁移说明，不随 VSIX 分发、不提交）
+.PrivateDoc/
+
+# 构建产物
+node_modules/
+out/
+*.vsix
+
+# 其他
+*.log

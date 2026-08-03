@@ -1,0 +1,135 @@
+{
+	"name": "llm-bridge",
+	"displayName": "LLM Bridge for Copilot Chat",
+	"description": "将 Copilot Chat 路由到任意 OpenAI 兼容端点：本地模型（llama.cpp / Ollama / LM Studio）与云端 API（DeepSeek / Qwen / GLM / Kimi / 豆包 / MiMo...）。多模型、每个模型独立 baseUrl 与 API Key。",
+	"version": "0.1.0",
+	"publisher": "local",
+	"license": "MIT",
+	"engines": {
+		"vscode": "^1.116.0"
+	},
+	"categories": [
+		"AI",
+		"Chat"
+	],
+	"keywords": [
+		"copilot",
+		"llm-bridge",
+		"local",
+		"llama.cpp",
+		"ollama",
+		"openai-compatible",
+		"deepseek",
+		"mimo"
+	],
+	"activationEvents": [
+		"onStartupFinished"
+	],
+	"main": "./out/extension.js",
+	"icon": "icon.png",
+	"contributes": {
+		"languageModelChatProviders": [
+			{
+				"vendor": "llm-bridge",
+				"displayName": "LLM Bridge"
+			}
+		],
+		"commands": [
+			{
+				"command": "llm-bridge.refreshModels",
+				"title": "LLM Bridge: 刷新模型列表"
+			},
+			{
+				"command": "llm-bridge.openSettings",
+				"title": "LLM Bridge: 打开模型设置"
+			},
+			{
+				"command": "llm-bridge.checkBalance",
+				"title": "LLM Bridge: 查询 DeepSeek 余额"
+			},
+			{
+				"command": "llm-bridge.setVisionModel",
+				"title": "LLM Bridge: 配置视觉代理模型"
+			},
+			{
+				"command": "llm-bridge.addModel",
+				"title": "LLM Bridge: 添加模型（预设）"
+			}
+		],
+		"configuration": {
+			"title": "LLM Bridge",
+			"properties": {
+				"llm-bridge.deepseekApiKey": {
+					"type": "string",
+					"default": "",
+					"description": "DeepSeek API Key。填写后模型选择器才会出现 DeepSeek V4 Pro / Flash。"
+				},
+				"llm-bridge.mimoApiKey": {
+					"type": "string",
+					"default": "",
+					"description": "小米 MiMo Token（Token Plan）。填写后才会出现 MiMo v2.5 / v2.5 Pro。"
+				},
+				"llm-bridge.openaiBaseUrl": {
+					"type": "string",
+					"default": "",
+					"description": "自定义 OpenAI 兼容端点 baseUrl，如 http://127.0.0.1:8080/v1 或 https://api.example.com/v1"
+				},
+				"llm-bridge.openaiApiKey": {
+					"type": "string",
+					"default": "",
+					"description": "自定义 OpenAI 兼容端点的 API Key（本地端点可留空）"
+				},
+				"llm-bridge.openaiModel": {
+					"type": "string",
+					"default": "",
+					"description": "自定义 OpenAI 兼容端点的模型 ID，如 gpt-4o、gemma4 等"
+				},
+				"llm-bridge.openaiContextWindow": {
+					"type": "number",
+					"default": 0,
+					"description": "自定义 OpenAI 端点的上下文窗口（tokens）；0 = 128K"
+				},
+				"llm-bridge.contextWindow": {
+					"type": "number",
+					"default": 0,
+					"description": "全局上下文窗口（tokens），覆盖所有模型；0 = 使用各模型官方默认值（DeepSeek/MiMo 为 1M）。超出时自动截断较早对话。"
+				},
+				"llm-bridge.visionModel": {
+					"type": "string",
+					"default": "",
+					"description": "视觉代理模型（vendor/id），留空自动选微软免费模型（仅纯文本模型看图用；多模态模型如 MiMo v2.5 原生收图不受影响）"
+				},
+				"llm-bridge.visionPrompt": {
+					"type": "string",
+					"editPresentation": "multilineText",
+					"default": "Describe all image attachments in this message.\n\nIf there is one image, describe it directly.\nIf there are multiple images:\n1. Describe each image separately, preserving their order.\n2. Then provide a combined description explaining the overall context and relationships across the images.\n\nReturn one concise factual description suitable for inserting into a text-only chat prompt. Include visible text, objects, UI elements, people, and relevant context. Do not invent details.",
+					"markdownDescription": "发送给视觉代理模型看图用的提示词"
+				},
+				"llm-bridge.deepseekContextWindow": {
+					"type": "number",
+					"default": 0,
+					"description": "DeepSeek 上下文窗口（tokens），0 = 官方 1M；超出自动截断较早对话"
+				},
+				"llm-bridge.mimoContextWindow": {
+					"type": "number",
+					"default": 0,
+					"description": "MiMo 上下文窗口（tokens），0 = 官方 1M；超出自动截断较早对话"
+				}
+			}
+		}
+	},
+	"scripts": {
+		"compile": "tsc -p ./",
+		"watch": "tsc -watch -p ./",
+		"vscode:prepublish": "npm run compile",
+		"package": "vsce package",
+		"test": "vitest run"
+	},
+	"devDependencies": {
+		"@types/node": "^24.0.0",
+		"@types/vscode": "^1.116.0",
+		"@vscode/vsce": "^3.9.1",
+		"typescript": "^5.7.2",
+		"vitest": "^4.1.10"
+	}
+}

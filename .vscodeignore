@@ -1,0 +1,12 @@
+.vscode/**
+.PrivateDoc/**
+src/**
+test/**
+node_modules/**
+.gitignore
+**/*.map
+**/tsconfig.json
+**/.npmrc
+**/*.jpg
+**/*.jpeg
+**/*.webp
