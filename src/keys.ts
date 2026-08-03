@@ -7,6 +7,13 @@ export const SECRET_KEYS = {
 	openai: 'llm-bridge.openaiApiKey',
 } as const;
 
+/** 旧版 settings.json 配置项 → SecretStorage key 的映射。 */
+const LEGACY_KEY_MAP: ReadonlyArray<{ configName: string; secretKey: string }> = [
+	{ configName: 'deepseekApiKey', secretKey: SECRET_KEYS.deepseek },
+	{ configName: 'mimoApiKey', secretKey: SECRET_KEYS.mimo },
+	{ configName: 'openaiApiKey', secretKey: SECRET_KEYS.openai },
+];
+
 /** 自定义端点在 SecretStorage 中存储 apiKey 的 key（按端点 id 区分）。 */
 export function endpointSecretKey(id: string): string {
 	return `llm-bridge.endpoint.${id}.apiKey`;
@@ -18,7 +25,7 @@ export function endpointSecretKey(id: string): string {
  */
 export async function migrateLegacyKeys(context: vscode.ExtensionContext): Promise<void> {
 	const config = vscode.workspace.getConfiguration('llm-bridge');
-	for (const [configName, secretKey] of Object.entries(SECRET_KEYS)) {
+	for (const { configName, secretKey } of LEGACY_KEY_MAP) {
 		try {
 			if (await context.secrets.get(secretKey)) {
 				continue;

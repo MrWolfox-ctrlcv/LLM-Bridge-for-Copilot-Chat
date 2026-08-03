@@ -2,7 +2,7 @@
 	"name": "llm-bridge",
 	"displayName": "LLM Bridge for Copilot Chat",
 	"description": "将 Copilot Chat 路由到任意 OpenAI 兼容端点：本地模型（llama.cpp / Ollama / LM Studio）与云端 API（DeepSeek / Qwen / GLM / Kimi / 豆包 / MiMo...）。多模型、每个模型独立 baseUrl 与 API Key。",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"publisher": "local",
 	"license": "MIT",
 	"engines": {
