@@ -82,13 +82,16 @@ export class LlmBridgeProvider {
 
 		const tools = cfg.toolCalling ? convertTools(options.tools) : undefined;
 
-		// 读取模型选择器中的"思考强度"（none=关闭 / high=平衡 / max=深度）
+		// 读取模型选择器中的"思考强度"（none=关闭 / high=标准 / max=深度）
 		const anyOptions = options as unknown as Record<string, unknown>;
 		const modelOptions = (anyOptions.modelOptions ??
 			anyOptions.modelConfiguration ??
 			anyOptions.configuration) as Record<string, unknown> | undefined;
-		const effort =
+		const rawEffort =
 			typeof modelOptions?.reasoningEffort === 'string' ? modelOptions.reasoningEffort : 'high';
+		// 归一化到官方支持的档位（DeepSeek 官方枚举 low/high/max；none 用 thinking:disabled 表达）
+		const effort: 'none' | 'high' | 'max' =
+			rawEffort === 'none' || rawEffort === 'max' ? rawEffort : 'high';
 
 		const request = {
 			model: cfg.model,

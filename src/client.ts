@@ -171,6 +171,29 @@ export class OpenAIClient {
 			cancelListener?.dispose();
 		}
 	}
+
+	/** 拉取 OpenAI 兼容的可用模型列表（GET {baseUrl}/models），失败时抛出错误。 */
+	async listModels(): Promise<string[]> {
+		const headers: Record<string, string> = {};
+		if (this.apiKey) {
+			headers.Authorization = `Bearer ${this.apiKey}`;
+		}
+		const response = await fetch(`${this.baseUrl}/models`, {
+			method: 'GET',
+			headers,
+		});
+		if (!response.ok) {
+			const text = await response.text().catch(() => '');
+			throw new Error(`HTTP ${response.status}${text ? `: ${text.slice(0, 300)}` : ''}`);
+		}
+		const data = (await response.json()) as { data?: Array<{ id?: string }> };
+		if (!Array.isArray(data?.data)) {
+			throw new Error('响应缺少 data 模型数组');
+		}
+		return data.data
+			.map((m) => m.id)
+			.filter((id): id is string => typeof id === 'string' && id.length > 0);
+	}
 }
 
 function flushToolCalls(pending: Map<number, ToolCallResult>, callbacks: StreamCallbacks): void {

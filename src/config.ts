@@ -30,7 +30,7 @@ export interface ModelConfig {
 	cost?: ModelCost;
 }
 
-/** 自定义 OpenAI 兼容端点。 */
+/** 自定义 OpenAI 兼容端点（一个端点 = 一个 baseUrl + 一个模型）。 */
 export interface CustomEndpoint {
 	/** 端点唯一 id（用于在 SecretStorage 中关联 apiKey）。 */
 	id: string;
@@ -43,29 +43,25 @@ export interface CustomEndpoint {
 	contextWindow: number;
 	toolCalling: boolean;
 	imageInput: boolean;
+	/** 该端点模型是否支持思考模式（影响发送 thinking / reasoning_effort 参数）。 */
+	thinking: boolean;
+	/** 是否发送 thinking:{type:'enabled'} + reasoning_effort（DeepSeek 官方等）。 */
+	sendThinkingParam: boolean;
+	/** 共享 apiKey 的组 id（同一供应商一次勾选的一批模型）；缺省 = 自身 id。 */
+	group?: string;
 }
 
 /** 极简供应商配置：key 存系统钥匙串（SecretStorage），其余存 settings.json。 */
 export interface ProviderSettings {
-	deepseekApiKey: string;
-	mimoApiKey: string;
 	endpoints: CustomEndpoint[];
-	deepseekContextWindow: number;
-	mimoContextWindow: number;
 	contextWindow: number;
 }
 
 export async function getProviderSettings(context: vscode.ExtensionContext): Promise<ProviderSettings> {
 	const config = vscode.workspace.getConfiguration('llm-bridge');
-	const deepseekApiKey = await readApiKey(context, SECRET_KEYS.deepseek, 'deepseekApiKey');
-	const mimoApiKey = await readApiKey(context, SECRET_KEYS.mimo, 'mimoApiKey');
 	const endpoints = await parseEndpoints(context, config);
 	return {
-		deepseekApiKey,
-		mimoApiKey,
 		endpoints,
-		deepseekContextWindow: num(config.get('deepseekContextWindow')),
-		mimoContextWindow: num(config.get('mimoContextWindow')),
 		contextWindow: num(config.get('contextWindow')),
 	};
 }
@@ -81,8 +77,10 @@ async function parseEndpoints(
 		if (!ep) {
 			continue;
 		}
-		const secret = await readApiKey(context, endpointSecretKey(ep.id));
-		ep.apiKey = ep.apiKey || secret;
+		// 组 Key 优先（同供应商一批模型共享），其次自身 id 的 Key（旧格式），最后配置内联
+		const groupKey = await readApiKey(context, endpointSecretKey(ep.group || ep.id));
+		const legacyKey = await readApiKey(context, endpointSecretKey(ep.id));
+		ep.apiKey = ep.apiKey || legacyKey || groupKey;
 		endpoints.push(ep);
 	}
 	// 兼容旧版单槽配置：endpoints 为空但 openaiBaseUrl + openaiModel 已填时，自动转换为一个端点
@@ -100,6 +98,8 @@ async function parseEndpoints(
 				contextWindow: num(config.get('openaiContextWindow')),
 				toolCalling: true,
 				imageInput: false,
+				thinking: false,
+				sendThinkingParam: false,
 			});
 		}
 	}
@@ -115,6 +115,9 @@ interface RawEndpoint {
 	contextWindow?: unknown;
 	toolCalling?: unknown;
 	imageInput?: unknown;
+	thinking?: unknown;
+	sendThinkingParam?: unknown;
+	group?: unknown;
 }
 
 function normalizeEndpoint(raw: unknown): CustomEndpoint | null {
@@ -137,6 +140,9 @@ function normalizeEndpoint(raw: unknown): CustomEndpoint | null {
 		contextWindow: num(e.contextWindow),
 		toolCalling: e.toolCalling === undefined ? true : Boolean(e.toolCalling),
 		imageInput: e.imageInput === true,
+		thinking: e.thinking === true,
+		sendThinkingParam: e.sendThinkingParam === true,
+		group: str(e.group) || undefined,
 	};
 }
 

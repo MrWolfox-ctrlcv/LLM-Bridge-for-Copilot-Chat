@@ -30,9 +30,6 @@ export const IMAGE_DESCRIPTION_UNAVAILABLE = '[Image Description unavailable]';
 const EXCLUDED_VENDORS = new Set(['llm-bridge', 'deepseek', 'claude-code', 'copilotcli']);
 const EXCLUDED_IDS = new Set(['copilot-utility', 'copilot-utility-small']);
 
-/** 自动模式下的首选视觉模型（找不到就取列表第一个）。 */
-const DEFAULT_VISION_MODEL_ID = 'oswe-vscode-prime';
-
 export interface VisionModelOption {
 	/** 形如 vendor/id 的唯一键 */
 	key: string;
@@ -59,7 +56,7 @@ export async function listVisionModelOptions(): Promise<VisionModelOption[]> {
 /**
  * 创建一个"视觉模型获取器"：
  * - 若设置了 llm-bridge.visionModel，则用它（vendor/id 格式）
- * - 否则自动挑选：优先 oswe-vscode-prime，取不到就取列表第一个
+ * - 否则自动选择第一个可用的视觉模型（与 Vizards 的透明视觉代理一致，零配置）
  * 设置变更后调用 reset() 会重新解析。
  */
 export function createVisionDescriberGetter(): {
@@ -85,9 +82,10 @@ export function createVisionDescriberGetter(): {
 					return undefined;
 				}
 				const configuredKey = getConfiguredVisionModelKey();
+				// 零配置时自动选择第一个可用的视觉模型（不再固定默认微软模型）
 				const picked = configuredKey
-					? options.find((o) => o.key === configuredKey)
-					: options.find((o) => o.id === DEFAULT_VISION_MODEL_ID) ?? options[0];
+					? options.find((o) => o.key === configuredKey) ?? options[0]
+					: options[0];
 				if (!picked) {
 					return undefined;
 				}

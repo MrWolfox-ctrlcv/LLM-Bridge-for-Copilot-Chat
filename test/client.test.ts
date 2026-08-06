@@ -139,3 +139,50 @@ describe('OpenAIClient.streamChatCompletion', () => {
 		expect(error?.message).toContain('400');
 	});
 });
+
+describe('OpenAIClient.listModels', () => {
+	let fetchMock: ReturnType<typeof vi.fn>;
+
+	beforeEach(() => {
+		fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it('GET /models 返回模型 ID 列表（过滤空 id）', async () => {
+		fetchMock.mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					data: [
+						{ id: 'deepseek-v4-pro' },
+						{ id: 'deepseek-v4-flash' },
+						{ id: '' },
+					],
+				}),
+				{ status: 200, headers: { 'Content-Type': 'application/json' } }
+			)
+		);
+		const client = new OpenAIClient('http://localhost/v1', 'sk-test');
+		const models = await client.listModels();
+		expect(models).toEqual(['deepseek-v4-pro', 'deepseek-v4-flash']);
+		expect(fetchMock.mock.calls[0][0]).toBe('http://localhost/v1/models');
+		const init = fetchMock.mock.calls[0][1] as RequestInit;
+		expect(init.method).toBe('GET');
+		expect((init.headers as Record<string, string>).Authorization).toBe('Bearer sk-test');
+	});
+
+	it('请求失败时抛出含状态码的错误', async () => {
+		fetchMock.mockResolvedValue(new Response('unauthorized', { status: 401 }));
+		const client = new OpenAIClient('http://localhost/v1', 'bad');
+		await expect(client.listModels()).rejects.toThrow('401');
+	});
+
+	it('响应缺少 data 数组时抛出错误', async () => {
+		fetchMock.mockResolvedValue(new Response(JSON.stringify({ foo: 1 }), { status: 200 }));
+		const client = new OpenAIClient('http://localhost/v1', '');
+		await expect(client.listModels()).rejects.toThrow('data');
+	});
+});
