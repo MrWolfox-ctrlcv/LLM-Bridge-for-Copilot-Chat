@@ -158,6 +158,7 @@
 		"watch": "tsc -watch -p ./",
 		"vscode:prepublish": "npm run compile",
 		"package": "vsce package",
+		"package:release": "node scripts/package-release.mjs",
 		"test": "vitest run"
 	},
 	"devDependencies": {

@@ -3,6 +3,7 @@
 .vsix/**
 src/**
 test/**
+scripts/**
 node_modules/**
 .git/**
 .gitignore
