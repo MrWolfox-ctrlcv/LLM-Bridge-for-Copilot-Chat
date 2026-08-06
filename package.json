@@ -7,7 +7,7 @@
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/MrWolfox-ctrlcv/vscode-llm-bridge.git"
+		"url": "https://github.com/MrWolfox-ctrlcv/LLM-Bridge-for-Copilot-Chat.git"
 	},
 	"engines": {
 		"vscode": "^1.116.0"

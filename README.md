@@ -6,11 +6,11 @@ Route **Copilot Chat** to any **OpenAI-compatible endpoint**: DeepSeek, MiMo, Op
 
 ## Features
 
+- **Inherits the full Copilot capability stack**: plugs directly into Copilot's native provider API and gets the complete Copilot capability set for free
 - **Zero-config presets**: DeepSeek, MiMo (Token Plan / Official API), OpenCode Zen / Go, OpenRouter — just paste your key and go
 - **Unified flow**: for presets and custom endpoints alike, it **auto-fetches the model list** after you enter a key — check the ones you want and you're done
 - Thinking mode (adjustable effort), tool calling (Agent), a transparent vision proxy (auto-picks an installed vision model for text-only models), and balance queries
 - Per-provider context windows with automatic truncation when exceeded
-- **Fully coexists with the DeepSeek V4 for Copilot** extension (registered model IDs use a `custom-` prefix, so there is no conflict)
 
 ## Quick Start
 
@@ -30,7 +30,7 @@ Route **Copilot Chat** to any **OpenAI-compatible endpoint**: DeepSeek, MiMo, Op
 | OpenRouter | `https://openrouter.ai/api/v1` | Pay-as-you-go | `sk-or-...` |
 | Custom endpoint | Any OpenAI-compatible URL | — | Any |
 
-> Every preset follows the exact same flow: enter key → auto-fetch `/models` → **check the models** (multi-select) → set context. When a provider adds models, use **「LLM Bridge: Manage Models」** to refresh and see them.
+> Enter key → auto-fetch `/models` → **check the models** (multi-select) → set context. When a provider adds models, use **「LLM Bridge: Manage Models」** to refresh and see them.
 
 ## Configuration
 
@@ -61,7 +61,7 @@ All models come from **endpoint configuration** (`llm-bridge.endpoints`) — the
 
 - If an endpoint model supports **thinking mode** (e.g. DeepSeek Official), the model picker shows a **Reasoning Effort** dropdown (Off / High / Max), sending the official parameters (`thinking` + `reasoning_effort`)
 - If an endpoint model supports **multimodal input** (e.g. MiMo v2.5), images are parsed natively and skip the vision proxy
-- **Fully coexists with the DeepSeek V4 for Copilot** extension (registered IDs use the `custom-` prefix, no conflict)
+- Can coexist with the DeepSeek V4 for Copilot extension (registered IDs use the `custom-` prefix, no conflict)
 
 ## Commands
 

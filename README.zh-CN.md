@@ -6,11 +6,11 @@
 
 ## 特性
 
+- **继承全部copilot能力**：直接接入 Copilot 的原生 provider API，免费获得完整copilot能力栈
 - **零配置预设**：DeepSeek、MiMo（Token Plan / 官方 API）、OpenCode Zen / Go、OpenRouter，填 Key 即用
 - **统一流程**：所有预设/自定义端点，填 Key 后**自动拉取模型列表、勾选多个即用**
 - 思考模式（强度可调）、工具调用（Agent）、视觉代理（透明，自动选已装视觉模型）、余额查询
 - 上下文窗口可逐供应商配置，超出自动截断
-- 与 **DeepSeek V4 for Copilot** 插件**完全并存**（模型 ID 带 `custom-` 前缀，不冲突）
 
 ## 快速开始
 
@@ -30,7 +30,7 @@
 | OpenRouter | `https://openrouter.ai/api/v1` | 按量付费 | `sk-or-...` |
 | 自定义端点 | 任意 OpenAI 兼容地址 | — | 任意 |
 
-> 所有预设流程**完全一致**：填 Key → 自动拉取 `/models` → **勾选要使用的模型**（可多选）→ 设置上下文。供应商更新模型后，用「LLM Bridge: 管理模型」刷新即可看到新模型。
+> 填 Key → 自动拉取 `/models` → **勾选要使用的模型**（可多选）→ 设置上下文。供应商更新模型后，用「LLM Bridge: 管理模型」刷新即可看到新模型。
 
 ## 配置
 
@@ -61,7 +61,7 @@
 
 - 端点模型若支持**思考模式**（如 DeepSeek 官方），模型选择器会出现「思考强度」下拉（关闭 / 高 / 最大），发送的参数符合官方枚举（`thinking` + `reasoning_effort`）
 - 端点模型若**支持多模态**（如 MiMo v2.5），图片直接原生解析，不走视觉代理
-- 与 **DeepSeek V4 for Copilot** 插件**完全并存**（注册 ID 带 `custom-` 前缀，不冲突）
+- 可与 DeepSeek V4 for Copilot 插件并存（注册 ID 带 `custom-` 前缀，不冲突）
 
 ## 命令
 
