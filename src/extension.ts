@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { getProviderSettings, type CustomEndpoint } from './config';
+import { getProviderSettings, type CustomEndpoint, type ModelCost } from './config';
 import { buildModels } from './models';
 import { queryBalance } from './balance';
 import { LlmBridgeProvider } from './provider';
@@ -10,8 +10,12 @@ import { OpenAIClient } from './client';
 /** LLM Bridge 诊断输出面板（排查问题用，可在「输出」面板查看）。 */
 const output = vscode.window.createOutputChannel('LLM Bridge');
 
-export function activate(context: vscode.ExtensionContext): void {
+/** 当前激活的 provider 引用，供 deactivate 时清理模型选择器。 */
+let activeProvider: LlmBridgeProvider | undefined;
+
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
 	const provider = new LlmBridgeProvider(context);
+	activeProvider = provider;
 
 	// 一次性迁移：旧 key 迁入系统钥匙串 + 旧内置 DeepSeek/MiMo 配置转为统一端点
 	void migrateLegacyKeys(context);
@@ -137,13 +141,21 @@ export function activate(context: vscode.ExtensionContext): void {
 			// 所有预设统一走同一流程：预填 baseUrl → 填 Key → 拉取并勾选模型列表
 			const endpointPresets: Record<
 				string,
-				{ baseUrl: string; name: string; thinking?: boolean; sendThinkingParam?: boolean }
+				{
+					baseUrl: string;
+					name: string;
+					thinking?: boolean;
+					sendThinkingParam?: boolean;
+					/** 该预设的官方价格（按模型 ID 查表；查不到则不设置）。 */
+					cost?: (model: string) => ModelCost | undefined;
+				}
 			> = {
 				deepseek: {
 					baseUrl: 'https://api.deepseek.com/v1',
 					name: 'DeepSeek 官方',
 					thinking: true,
 					sendThinkingParam: true,
+					cost: deepseekCost,
 				},
 				mimo: { baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1', name: 'MiMo Token Plan', thinking: true },
 				'mimo-official': { baseUrl: 'https://api.xiaomimimo.com/v1', name: 'MiMo 官方 API', thinking: true },
@@ -277,7 +289,12 @@ export function activate(context: vscode.ExtensionContext): void {
 				const rawId = String((raw as { id?: unknown }).id ?? '');
 				return !toRemove.some((e) => e.id === rawId);
 			});
-			const baseName = groupEps[0].name.replace(/ · .*/, '');
+			// 供应商前缀：仅当现有显示名带「 · 」分隔（如「OpenCode Zen · model」）时提取；
+			// 若显示名是裸模型 ID 则不拼接，新增模型直接以模型 ID 作为显示名，
+			// 避免出现「deepseek-v4-flash-free · longcat-2.0-free」两个模型名拼在一起。
+			const sep = ' · ';
+			const first = groupEps[0];
+			const baseName = first.name.includes(sep) ? first.name.split(sep)[0] : '';
 			const stamp = Date.now().toString(36);
 			let idx = 0;
 			for (const id of toAdd) {
@@ -286,7 +303,7 @@ export function activate(context: vscode.ExtensionContext): void {
 					...next,
 					{
 						id: epId,
-						name: `${baseName} · ${id}`,
+						name: baseName ? `${baseName}${sep}${id}` : id,
 						baseUrl: pickedGroup.baseUrl,
 						model: id,
 						contextWindow: groupEps[0].contextWindow,
@@ -295,6 +312,7 @@ export function activate(context: vscode.ExtensionContext): void {
 						thinking: groupEps[0].thinking,
 						sendThinkingParam: groupEps[0].sendThinkingParam,
 						group: groupId,
+						...(groupEps[0].cost ? { cost: groupEps[0].cost } : {}),
 					},
 				];
 			}
@@ -363,12 +381,29 @@ export function activate(context: vscode.ExtensionContext): void {
 				provider.refreshModelPicker();
 				provider.resetVision();
 			}
-		})
+		}),
+		// 多窗口同步：另一窗口增删 SecretStorage 中的 Key 时刷新本窗口模型选择器
+		context.secrets.onDidChange(() => provider.refreshModelPicker())
 	);
+
+	// 先激活 Copilot Chat 再刷新模型选择器：确保 configurationSchema（思考强度下拉）等
+	// 元数据立即生效而不是走宿主缓存（参考 deepseek-v4-for-copilot）。
+	await activateCopilotChat();
+	provider.refreshModelPicker();
 }
 
-export function deactivate(): void {
-	// 无需清理
+export async function deactivate(): Promise<void> {
+	await activeProvider?.prepareForDeactivate();
+	activeProvider = undefined;
+}
+
+/** 激活 Copilot Chat，使后续 refreshModelPicker 能被实时监听者接收到。 */
+async function activateCopilotChat(): Promise<void> {
+	try {
+		await vscode.extensions.getExtension('github.copilot-chat')?.activate();
+	} catch {
+		// 忽略：刷新可能延迟，但不阻塞启动
+	}
 }
 
 /**
@@ -380,7 +415,13 @@ async function addCustomEndpoint(
 	context: vscode.ExtensionContext,
 	provider: LlmBridgeProvider,
 	config: vscode.WorkspaceConfiguration,
-	preset?: { baseUrl: string; name: string; thinking?: boolean; sendThinkingParam?: boolean }
+	preset?: {
+		baseUrl: string;
+		name: string;
+		thinking?: boolean;
+		sendThinkingParam?: boolean;
+		cost?: (model: string) => ModelCost | undefined;
+	}
 ): Promise<void> {
 	const baseUrlInput = await vscode.window.showInputBox({
 		title: 'OpenAI 兼容端点 baseUrl',
@@ -493,22 +534,29 @@ async function addCustomEndpoint(
 		nameBase = input;
 	}
 	const name = nameBase.trim() || selected[0];
+	// 自定义了显示名时按「名称 · 模型ID」展示；留空（默认取第一个模型 ID）时各模型直接以自身 ID 显示，
+	// 避免出现「deepseek-v4-flash-free · longcat-2.0-free」这类两个模型名拼在一起。
+	const hasCustomName = Boolean(nameBase && nameBase.trim());
 
 	// 生成一组共享 Key 的端点（group 相同，Key 只存一份）
 	const group = `g-${Date.now().toString(36)}`;
 	const current = config.get<unknown[]>('endpoints', []);
-	const newEps = selected.map((model, i) => ({
-		id: `${group}-${i}`,
-		name: `${name} · ${model}`,
-		baseUrl: base,
-		model,
-		contextWindow,
-		toolCalling: true,
-		imageInput: false,
-		thinking,
-		sendThinkingParam,
-		group,
-	}));
+	const newEps = selected.map((model, i) => {
+		const modelCost = preset?.cost ? preset.cost(model) : undefined;
+		return {
+			id: `${group}-${i}`,
+			name: hasCustomName ? `${name} · ${model}` : model,
+			baseUrl: base,
+			model,
+			contextWindow,
+			toolCalling: true,
+			imageInput: false,
+			thinking,
+			sendThinkingParam,
+			group,
+			...(modelCost ? { cost: modelCost } : {}),
+		};
+	});
 	await config.update('endpoints', [...current, ...newEps], vscode.ConfigurationTarget.Global);
 	if (key) {
 		await context.secrets.store(endpointSecretKey(group), key);
@@ -535,8 +583,8 @@ async function migrateLegacyProviders(context: vscode.ExtensionContext): Promise
 			const group = 'deepseek-official';
 			next = [
 				...next,
-				{ id: `${group}-pro`, name: 'DeepSeek 官方 · V4 Pro', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-v4-pro', contextWindow: 1000000, toolCalling: true, imageInput: false, thinking: true, sendThinkingParam: true, group },
-				{ id: `${group}-flash`, name: 'DeepSeek 官方 · V4 Flash', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-v4-flash', contextWindow: 1000000, toolCalling: true, imageInput: false, thinking: true, sendThinkingParam: true, group },
+				{ id: `${group}-pro`, name: 'DeepSeek 官方 · V4 Pro', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-v4-pro', contextWindow: 1000000, toolCalling: true, imageInput: false, thinking: true, sendThinkingParam: true, group, cost: deepseekCost('deepseek-v4-pro') },
+				{ id: `${group}-flash`, name: 'DeepSeek 官方 · V4 Flash', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-v4-flash', contextWindow: 1000000, toolCalling: true, imageInput: false, thinking: true, sendThinkingParam: true, group, cost: deepseekCost('deepseek-v4-flash') },
 			];
 			await context.secrets.store(endpointSecretKey(group), deepseekKey);
 			await context.secrets.delete(SECRET_KEYS.deepseek);
@@ -596,4 +644,17 @@ async function fetchModelList(baseUrl: string, apiKey: string): Promise<string[]
 		);
 		return [];
 	}
+}
+
+/**
+ * DeepSeek 官方 V4 价格表（¥/1M tokens：input=输入缓存未命中、cache=缓存命中、output=输出）。
+ * 数据来源：DeepSeek 官方定价页（2026-08，与 deepseek-v4-for-copilot 的 CNY 定价一致）；
+ * 官方提示近期可能调价，如有出入以官方为准。仅对能确认官方价格的模型返回，其余返回 undefined。
+ */
+function deepseekCost(model: string): ModelCost | undefined {
+	const table: Record<string, ModelCost> = {
+		'deepseek-v4-flash': { input: '¥1', output: '¥2', cache: '¥0.02', category: 'low' },
+		'deepseek-v4-pro': { input: '¥3', output: '¥6', cache: '¥0.025', category: 'low' },
+	};
+	return table[model];
 }

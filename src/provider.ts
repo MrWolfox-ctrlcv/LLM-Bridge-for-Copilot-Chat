@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { OpenAIClient } from './client';
 import { getProviderSettings, type ModelConfig } from './config';
 import { buildModels } from './models';
-import { convertMessages, convertTools, countMessageChars, messageChars } from './convert';
+import { convertMessages, convertTools, countMessageChars, messageChars, safeStringify } from './convert';
 import { trimMessagesToContext } from './context';
 import { createVisionDescriberGetter, resolveImageMessages } from './vision';
 
@@ -19,6 +19,9 @@ export class LlmBridgeProvider {
 
 	/** 自适应 chars-per-token 比率，用于 token 数估算与截断。 */
 	private charsPerToken = 4.0;
+
+	/** 扩展是否处于激活状态；卸载时置 false 以便模型从选择器移除。 */
+	private isActive = true;
 
 	/** 视觉代理：仅服务于纯文本模型（多模态模型直接原生收图）。 */
 	private readonly visionGetter = createVisionDescriberGetter();
@@ -38,6 +41,22 @@ export class LlmBridgeProvider {
 		this.visionGetter.reset();
 	}
 
+	/**
+	 * 扩展卸载前调用：置为非激活并强制宿主重新拉取模型信息。
+	 * 此时 provideLanguageModelChatInformation 返回空列表，Copilot Chat 会立即把
+	 * LLM Bridge 模型从选择器移除，避免重载后残留陈旧条目（参考 deepseek-v4-for-copilot）。
+	 */
+	async prepareForDeactivate(): Promise<void> {
+		this.isActive = false;
+		this.onDidChangeEmitter.fire();
+		try {
+			// 返回值不使用——只为触发宿主同步重拉 provider 的副作用
+			await vscode.lm.selectChatModels({ vendor: 'llm-bridge' });
+		} catch {
+			// 忽略：卸载清理尽力而为
+		}
+	}
+
 	private async getModels(): Promise<ModelConfig[]> {
 		return buildModels(await getProviderSettings(this.context));
 	}
@@ -46,6 +65,9 @@ export class LlmBridgeProvider {
 		_options: vscode.PrepareLanguageModelChatModelOptions,
 		_token: vscode.CancellationToken
 	): Promise<vscode.LanguageModelChatInformation[]> {
+		if (!this.isActive) {
+			return [];
+		}
 		return (await this.getModels()).map(toChatInfo);
 	}
 
@@ -135,6 +157,9 @@ export class LlmBridgeProvider {
 						const observed = totalChars / promptTokens;
 						this.charsPerToken = this.charsPerToken * 0.7 + observed * 0.3;
 					}
+					// 上报真实 token 用量给 Copilot（mimeType='usage' 的 data part）：
+					// 右下角"会话信息"面板的已用 token / 百分比与响应脚注的 "X in, Y out" 都依赖它。
+					reportUsagePart(progress, usage);
 				},
 				onError: (error) => {
 					throw new Error(`[LLM Bridge] ${cfg.name} 请求失败：${error.message}`);
@@ -152,8 +177,7 @@ export class LlmBridgeProvider {
 		text: string | vscode.LanguageModelChatRequestMessage,
 		_token: vscode.CancellationToken
 	): Promise<number> {
-		const str = typeof text === 'string' ? text : JSON.stringify(text);
-		return Math.ceil(str.length / this.charsPerToken);
+		return Math.ceil(estimateMessageChars(text) / this.charsPerToken);
 	}
 }
 
@@ -166,6 +190,10 @@ function toChatInfo(m: ModelConfig): vscode.LanguageModelChatInformation {
 		version: '',
 		detail,
 		tooltip: detail,
+		// 提案字段（运行时透传，参考 deepseek-v4-for-copilot）：
+		// isBYOK 标记为用户自带 Key 的模型，isUserSelectable 表示允许在模型选择器中手动选择
+		isBYOK: true,
+		isUserSelectable: true,
 		maxInputTokens: m.maxInputTokens,
 		maxOutputTokens: m.maxOutputTokens,
 		capabilities: {
@@ -224,4 +252,115 @@ function reportThinkingPart(progress: vscode.Progress<vscode.LanguageModelRespon
 	if (typeof ctor === 'function') {
 		progress.report(new (ctor as new (value: string) => object)(text) as vscode.LanguageModelResponsePart);
 	}
+}
+
+/** Copilot 识别 token 用量数据 part 的 mimeType（与 VS Code 内置 BYOK provider 一致）。 */
+const USAGE_DATA_PART_MIME = 'usage';
+
+/**
+ * 通过 LanguageModelDataPart 把真实 token 用量上报给 Copilot Chat。
+ *
+ * 参考 deepseek-v4-for-copilot 的 reportCopilotContextUsage：VS Code 扩展宿主收到
+ * mimeType 为 'usage' 的 data part 后解析为内部 APIUsage（{prompt_tokens, completion_tokens,
+ * total_tokens, prompt_tokens_details:{cached_tokens}}），据此驱动：
+ * - 聊天面板右下角"会话信息"（Session Info）面板：已用 token / 总上下文百分比；
+ * - 响应脚注的 "X in, Y out" 用量展示。
+ * 不发送此 part 时 VS Code 拿不到真实用量，会话信息面板会被隐藏、脚注无 token 统计。
+ */
+export function reportUsagePart(
+	progress: vscode.Progress<vscode.LanguageModelResponsePart>,
+	usage: Record<string, unknown> | undefined
+): void {
+	if (!usage) {
+		return;
+	}
+	const prompt = toNonNegativeInt(usage.prompt_tokens);
+	const completion = toNonNegativeInt(usage.completion_tokens);
+	if (prompt === undefined && completion === undefined) {
+		return;
+	}
+	// 兼容两种缓存字段：OpenAI 风格 prompt_tokens_details.cached_tokens，DeepSeek 风格 prompt_cache_hit_tokens
+	const details = usage.prompt_tokens_details as { cached_tokens?: unknown } | undefined;
+	const cached = toNonNegativeInt(details?.cached_tokens) ?? toNonNegativeInt(usage.prompt_cache_hit_tokens) ?? 0;
+	const data = {
+		prompt_tokens: prompt ?? 0,
+		completion_tokens: completion ?? 0,
+		total_tokens: toNonNegativeInt(usage.total_tokens) ?? (prompt ?? 0) + (completion ?? 0),
+		prompt_tokens_details: { cached_tokens: cached },
+	};
+	try {
+		progress.report(
+			new vscode.LanguageModelDataPart(new TextEncoder().encode(JSON.stringify(data)), USAGE_DATA_PART_MIME)
+		);
+	} catch {
+		// 运行时 API 不支持该 part 时静默忽略，不影响主流程
+	}
+}
+
+function toNonNegativeInt(value: unknown): number | undefined {
+	return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : undefined;
+}
+
+/** 单张图片的估算字符数（约 250 tokens）：避免把 base64 原样算进 token 导致严重高估。 */
+const IMAGE_PART_ESTIMATED_CHARS = 1000;
+/** 非图片二进制附件（如 PDF）的字符数上限。 */
+const MAX_BINARY_PART_CHARS = 10000;
+
+/**
+ * 估算一条消息/文本的字符数，用于 provideTokenCount。
+ * 图片等二进制 part 用固定估算值，而不是序列化后的 base64 长度（多模态模型原生收图时
+ * 旧实现会把整段 base64 算进 token，一张 1MB 图约高估到几十万 token）。
+ */
+export function estimateMessageChars(text: string | vscode.LanguageModelChatRequestMessage): number {
+	if (typeof text === 'string') {
+		return text.length;
+	}
+	let total = 0;
+	for (const part of text.content) {
+		if (typeof part === 'string') {
+			total += part.length;
+		} else if (part instanceof vscode.LanguageModelTextPart) {
+			total += part.value.length;
+		} else if (part instanceof vscode.LanguageModelToolCallPart) {
+			total += part.name.length + safeStringify(part.input).length;
+		} else if (part instanceof vscode.LanguageModelToolResultPart) {
+			for (const item of part.content) {
+				total += estimatePartChars(item);
+			}
+		} else {
+			total += estimatePartChars(part);
+		}
+	}
+	return total;
+}
+
+function estimatePartChars(part: unknown): number {
+	if (part instanceof vscode.LanguageModelTextPart) {
+		return part.value.length;
+	}
+	if (isDataPart(part)) {
+		return part.mimeType.startsWith('image/')
+			? IMAGE_PART_ESTIMATED_CHARS
+			: Math.min(part.data.byteLength, MAX_BINARY_PART_CHARS);
+	}
+	if (isThinkingPart(part)) {
+		const value = (part as { value: unknown }).value;
+		if (Array.isArray(value)) {
+			return value.reduce((sum, v) => sum + String(v).length, 0);
+		}
+		return typeof value === 'string' ? value.length : 0;
+	}
+	return 0;
+}
+
+function isDataPart(part: unknown): part is vscode.LanguageModelDataPart {
+	return (
+		typeof vscode.LanguageModelDataPart === 'function' &&
+		part instanceof vscode.LanguageModelDataPart
+	);
+}
+
+function isThinkingPart(part: unknown): boolean {
+	const ctor = (vscode as unknown as Record<string, unknown>).LanguageModelThinkingPart;
+	return typeof ctor === 'function' && part instanceof (ctor as new (...args: never[]) => object);
 }

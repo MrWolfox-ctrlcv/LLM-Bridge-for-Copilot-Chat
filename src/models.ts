@@ -22,6 +22,7 @@ export function buildModels(s: ProviderSettings): ModelConfig[] {
 				detail: `${ep.name} · ${ep.baseUrl}`,
 				sendThinkingParam: ep.sendThinkingParam,
 				toolCalling: ep.toolCalling,
+				...(ep.cost ? { cost: ep.cost } : {}),
 			})
 		);
 	}

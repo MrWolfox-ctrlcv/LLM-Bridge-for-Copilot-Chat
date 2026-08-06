@@ -99,7 +99,18 @@
 							"imageInput": { "type": "boolean", "default": false },
 							"thinking": { "type": "boolean", "default": false },
 							"sendThinkingParam": { "type": "boolean", "default": false },
-							"group": { "type": "string", "default": "" }
+							"group": { "type": "string", "default": "" },
+							"cost": {
+								"type": "object",
+								"default": {},
+								"description": "价格信息（¥/1M tokens）：input=输入（缓存未命中）、cache=缓存命中、output=输出、category=价格档位。仅预设提供，可选。",
+								"properties": {
+									"input": { "type": "string", "default": "" },
+									"output": { "type": "string", "default": "" },
+									"cache": { "type": "string", "default": "" },
+									"category": { "type": "string", "default": "" }
+								}
+							}
 						}
 					}
 				},

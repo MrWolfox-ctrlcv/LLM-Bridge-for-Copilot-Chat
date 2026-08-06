@@ -49,6 +49,8 @@ export interface CustomEndpoint {
 	sendThinkingParam: boolean;
 	/** 共享 apiKey 的组 id（同一供应商一次勾选的一批模型）；缺省 = 自身 id。 */
 	group?: string;
+	/** 价格信息（预设提供，如 DeepSeek 官方）；可选。 */
+	cost?: ModelCost;
 }
 
 /** 极简供应商配置：key 存系统钥匙串（SecretStorage），其余存 settings.json。 */
@@ -118,6 +120,7 @@ interface RawEndpoint {
 	thinking?: unknown;
 	sendThinkingParam?: unknown;
 	group?: unknown;
+	cost?: unknown;
 }
 
 function normalizeEndpoint(raw: unknown): CustomEndpoint | null {
@@ -143,6 +146,25 @@ function normalizeEndpoint(raw: unknown): CustomEndpoint | null {
 		thinking: e.thinking === true,
 		sendThinkingParam: e.sendThinkingParam === true,
 		group: str(e.group) || undefined,
+		cost: parseCost(e.cost),
+	};
+}
+
+function parseCost(raw: unknown): ModelCost | undefined {
+	if (!raw || typeof raw !== 'object') {
+		return undefined;
+	}
+	const c = raw as { input?: unknown; output?: unknown; cache?: unknown; category?: unknown };
+	const input = str(c.input);
+	const output = str(c.output);
+	if (!input || !output) {
+		return undefined;
+	}
+	return {
+		input,
+		output,
+		cache: str(c.cache) || input,
+		...(str(c.category) ? { category: str(c.category) } : {}),
 	};
 }
 
