@@ -114,7 +114,9 @@ code --install-extension llm-bridge-0.2.0.vsix   # 安装
 
 感谢原插件作者的优秀设计与开源精神。
 
-**感谢勤劳能干的deepseek-v4-flash正式版，使扩展成功落地**
+## AI 声明
+
+本项目在开发过程中使用了大语言模型（GitHub Copilot / DeepSeek）辅助完成编码、测试与文档撰写。
 
 ## 安全说明
 

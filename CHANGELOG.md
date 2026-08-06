@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.0] - 2026-08-06
+
+### 功能
+- **统一端点流程重构**：移除内置模型，所有模型均来自端点配置（`llm-bridge.endpoints`）
+- 所有预设流程统一：填 Key → 自动拉取 `/models` → **勾选要使用的模型（可多选）** → 设置上下文
+- 新增命令「LLM Bridge: 管理模型」：按供应商分组管理，支持刷新模型列表 / 删除单个模型 / 删除分组
+- 新增预设：OpenCode Zen / Go、OpenRouter
+- 思考强度支持官方参数（`thinking` + `reasoning_effort`）：关闭 / 高 / 最大
+- 端点配置新增 `thinking`、`sendThinkingParam`、`group` 字段；支持原生多模态模型直接解析图片
+
+### 其他
+- 模型注册 ID 改为 `custom-<id>`，发送给 API 的 `model` 名不变（与 DeepSeek V4 for Copilot 插件不冲突）
+
 ## [0.2.0] - 2026-08-03
 
 ### 安全（重要）

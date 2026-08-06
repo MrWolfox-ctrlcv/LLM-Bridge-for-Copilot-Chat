@@ -4,7 +4,10 @@
 src/**
 test/**
 node_modules/**
+.git/**
 .gitignore
+*.vsix
+**/*.ts
 **/*.map
 **/tsconfig.json
 **/.npmrc
