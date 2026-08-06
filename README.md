@@ -116,7 +116,7 @@ code --install-extension llm-bridge-0.2.0.vsix   # 安装
 
 ## AI 声明
 
-本项目在开发过程中使用了大语言模型（GitHub Copilot / DeepSeek）辅助完成编码、测试与文档撰写。
+本项目在开发过程中使用了大语言模型（DeepSeek）辅助完成编码、测试与文档撰写。
 
 ## 安全说明
 
