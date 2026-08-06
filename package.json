@@ -1,7 +1,7 @@
 {
 	"name": "llm-bridge",
-	"displayName": "LLM Bridge for Copilot Chat",
-	"description": "将 Copilot Chat 路由到任意 OpenAI 兼容端点：本地模型（llama.cpp / Ollama / LM Studio）与云端 API（DeepSeek / Qwen / GLM / Kimi / 豆包 / MiMo...）。多模型、每个模型独立 baseUrl 与 API Key。",
+	"displayName": "%displayName%",
+	"description": "%description%",
 	"version": "0.3.0",
 	"publisher": "local",
 	"license": "MIT",
@@ -41,27 +41,31 @@
 		"commands": [
 			{
 				"command": "llm-bridge.refreshModels",
-				"title": "LLM Bridge: 刷新模型列表"
+				"title": "%command.llm-bridge.refreshModels.title%"
 			},
 			{
 				"command": "llm-bridge.openSettings",
-				"title": "LLM Bridge: 打开模型设置"
+				"title": "%command.llm-bridge.openSettings.title%"
 			},
 			{
 				"command": "llm-bridge.checkBalance",
-				"title": "LLM Bridge: 查询余额"
+				"title": "%command.llm-bridge.checkBalance.title%"
 			},
 			{
 				"command": "llm-bridge.setVisionModel",
-				"title": "LLM Bridge: 配置视觉代理模型"
+				"title": "%command.llm-bridge.setVisionModel.title%"
 			},
 			{
 				"command": "llm-bridge.addModel",
-				"title": "LLM Bridge: 添加模型（预设）"
+				"title": "%command.llm-bridge.addModel.title%"
 			},
 			{
 				"command": "llm-bridge.manageModels",
-				"title": "LLM Bridge: 管理模型"
+				"title": "%command.llm-bridge.manageModels.title%"
+			},
+			{
+				"command": "llm-bridge.testConnection",
+				"title": "%command.llm-bridge.testConnection.title%"
 			}
 		],
 		"configuration": {

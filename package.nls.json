@@ -1,0 +1,11 @@
+{
+	"displayName": "LLM Bridge for Copilot Chat",
+	"description": "Route Copilot Chat to any OpenAI-compatible endpoint: local models (llama.cpp / Ollama / LM Studio) and cloud APIs (DeepSeek / Qwen / GLM / Kimi / Doubao / MiMo...). Multiple models, each with its own baseUrl and API key.",
+	"command.llm-bridge.refreshModels.title": "LLM Bridge: Refresh Model List",
+	"command.llm-bridge.openSettings.title": "LLM Bridge: Open Settings",
+	"command.llm-bridge.checkBalance.title": "LLM Bridge: Check Balance",
+	"command.llm-bridge.setVisionModel.title": "LLM Bridge: Configure Vision Model",
+	"command.llm-bridge.addModel.title": "LLM Bridge: Add Model (Preset)",
+	"command.llm-bridge.manageModels.title": "LLM Bridge: Manage Models",
+	"command.llm-bridge.testConnection.title": "LLM Bridge: Test Connection"
+}

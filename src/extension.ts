@@ -7,6 +7,9 @@ import { listVisionModelOptions } from './vision';
 import { SECRET_KEYS, endpointSecretKey, migrateLegacyKeys, readApiKey } from './keys';
 import { OpenAIClient } from './client';
 
+/** LLM Bridge 诊断输出面板（排查问题用，可在「输出」面板查看）。 */
+const output = vscode.window.createOutputChannel('LLM Bridge');
+
 export function activate(context: vscode.ExtensionContext): void {
 	const provider = new LlmBridgeProvider(context);
 
@@ -15,8 +18,54 @@ export function activate(context: vscode.ExtensionContext): void {
 	void migrateLegacyProviders(context);
 
 	context.subscriptions.push(
+		output,
 		vscode.lm.registerLanguageModelChatProvider('llm-bridge', provider),
 		vscode.commands.registerCommand('llm-bridge.refreshModels', () => provider.refreshModelPicker()),
+		vscode.commands.registerCommand('llm-bridge.testConnection', async () => {
+			const settings = await getProviderSettings(context);
+			if (settings.endpoints.length === 0) {
+				void vscode.window.showInformationMessage('[LLM Bridge] 当前没有已配置的端点，请先添加模型。');
+				return;
+			}
+			// 按 baseUrl 分组（同一供应商共享 Key 的一组模型）
+			const groups = new Map<string, CustomEndpoint[]>();
+			for (const ep of settings.endpoints) {
+				groups.set(ep.baseUrl, [...(groups.get(ep.baseUrl) ?? []), ep]);
+			}
+			const items = [...groups.entries()].map(([baseUrl, eps]) => ({
+				label: eps[0].name.replace(/ · .*/, ''),
+				description: `${eps.length} 个模型`,
+				detail: `${baseUrl} · ${eps.map((e) => e.model).join('、')}`,
+				baseUrl,
+			}));
+			const picked = await vscode.window.showQuickPick(items, {
+				title: 'LLM Bridge: 测试连通性',
+				placeHolder: '选择要测试的端点',
+			});
+			if (!picked) {
+				return;
+			}
+			const ep = settings.endpoints.find((e) => e.baseUrl === picked.baseUrl);
+			if (!ep) {
+				return;
+			}
+			const client = new OpenAIClient(ep.baseUrl, ep.apiKey);
+			try {
+				const models = await vscode.window.withProgress(
+					{
+						location: vscode.ProgressLocation.Notification,
+						title: `[LLM Bridge] 正在测试 ${ep.name}...`,
+					},
+					() => client.listModels()
+				);
+				void vscode.window.showInformationMessage(
+					`[LLM Bridge] ${ep.name} 连通正常 ✓（${models.length} 个可用模型）`
+				);
+			} catch (error) {
+				const msg = error instanceof Error ? error.message : String(error);
+				void vscode.window.showErrorMessage(`[LLM Bridge] ${ep.name} 连通失败：${msg}`);
+			}
+		}),
 		vscode.commands.registerCommand('llm-bridge.openSettings', () => {
 			void vscode.commands.executeCommand('workbench.action.openSettings', '@ext:local.llm-bridge');
 		}),
@@ -512,8 +561,18 @@ async function migrateLegacyProviders(context: vscode.ExtensionContext): Promise
 		if (changed) {
 			await config.update('endpoints', next, vscode.ConfigurationTarget.Global);
 		}
-	} catch {
-		// 迁移失败时静默跳过，读取逻辑会退回配置兜底
+	} catch (error) {
+		// 迁移失败不阻塞启动：写日志，仅首次弹通知引导用户重新添加（避免每次启动打扰）
+		output.appendLine(
+			`[迁移] 旧配置迁移失败：${error instanceof Error ? error.message : String(error)}`
+		);
+		const flag = 'migrationFailedNotified';
+		if (!context.globalState.get(flag)) {
+			await context.globalState.update(flag, true);
+			void vscode.window.showWarningMessage(
+				'[LLM Bridge] 旧版配置迁移失败，请使用「LLM Bridge: 添加模型（预设）」重新添加模型。'
+			);
+		}
 	}
 }
 
