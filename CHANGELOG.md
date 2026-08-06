@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.5] - 2026-08-06
+
+### 功能
+- **上报真实 token 用量给 Copilot Chat**：通过 `mimeType='usage'` 的数据 part 上报每次请求的 token 数，聊天面板右下角「会话信息」面板显示已用/总 token 与百分比，响应脚注显示 "X in, Y out"（此前面板不工作、脚注无统计）
+- 模型元数据增加 `isBYOK` / `isUserSelectable`（Copilot 模型选择器按"用户自带 Key"模型处理）
+- 扩展卸载/重载时主动清理模型选择器，不再残留陈旧模型条目
+- 激活时先激活 Copilot Chat 再刷新模型选择器，思考强度等配置立即生效
+- 多窗口同步：另一窗口增删 API Key 时本窗口模型选择器自动刷新
+- 修复 `provideTokenCount` 对图片消息的 token 估算严重失真（base64 不再计入，改用固定估算）
+- 接通 DeepSeek 官方价格表（`cost` 字段），VS Code「语言模型管理页」显示价格
+
+### 其他
+- 新增单元测试（usage 上报 + token 估算），共 48 例
+
 ## [0.3.0] - 2026-08-06
 
 ### 功能
