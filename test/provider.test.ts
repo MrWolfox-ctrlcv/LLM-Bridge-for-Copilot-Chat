@@ -38,7 +38,7 @@ vi.mock('vscode', () => {
 
 import * as vscode from 'vscode';
 
-import { estimateMessageChars, reportUsagePart } from '../src/provider';
+import { estimateMessageChars, reconcileReasoningContent, reportUsagePart } from '../src/provider';
 
 interface ReportedPart {
 	mimeType: string;
@@ -93,6 +93,42 @@ describe('reportUsagePart（Copilot 会话信息面板的 token 用量上报）'
 		const parsed = JSON.parse(new TextDecoder().decode(reported[0].data)) as Record<string, unknown>;
 		expect(parsed.prompt_tokens).toBe(0);
 		expect(parsed.total_tokens).toBe(0);
+	});
+});
+
+describe('reconcileReasoningContent（思考模式 reasoning_content 协议校正）', () => {
+	it('enabled：缺失字段的 assistant 消息补空串，已有/非 assistant 不动', () => {
+		const result = reconcileReasoningContent(
+			[
+				{ role: 'user', content: 'hi' },
+				{ role: 'assistant', content: '答案A' },
+				{ role: 'assistant', content: '答案B', reasoning_content: '思考B' },
+			],
+			'enabled'
+		);
+		expect(result[0]).toEqual({ role: 'user', content: 'hi' });
+		expect(result[1]).toEqual({ role: 'assistant', content: '答案A', reasoning_content: '' });
+		expect(result[2]).toEqual({ role: 'assistant', content: '答案B', reasoning_content: '思考B' });
+	});
+
+	it('disabled：移除 assistant 消息上的 reasoning_content', () => {
+		const result = reconcileReasoningContent(
+			[
+				{ role: 'assistant', content: '答案', reasoning_content: '思考' },
+				{ role: 'assistant', content: '答案2' },
+			],
+			'disabled'
+		);
+		expect(result[0]).toEqual({ role: 'assistant', content: '答案' });
+		expect(result[1]).toEqual({ role: 'assistant', content: '答案2' });
+	});
+
+	it('passthrough：字段原样保留', () => {
+		const input = [
+			{ role: 'assistant', content: '答案', reasoning_content: '思考' },
+			{ role: 'assistant', content: '答案2' },
+		];
+		expect(reconcileReasoningContent(input, 'passthrough')).toEqual(input);
 	});
 });
 

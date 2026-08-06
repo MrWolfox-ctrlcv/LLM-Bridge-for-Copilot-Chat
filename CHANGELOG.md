@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.6] - 2026-08-06
+
+### 功能
+- **思考模式默认开启**：接入端点时不再默认关闭思考；思考强度统一由运行时下拉（关 / 高 / 最大）控制
+- 端点未显式声明 `thinking` 时默认视为支持思考（`sendThinkingParam` 同理）
+- 移除接入时「是否支持思考模式」的一刀切询问（避免把可思考的模型误关）
+
+### 修复
+- 修复 DeepSeek 思考模式下多轮对话 400：请求开启思考时，历史中的 assistant 消息必须回传 `reasoning_content` 字段（空串即可），否则上游报 "The reasoning_content in the thinking mode must be passed back to the API"
+
 ## [0.3.5] - 2026-08-06
 
 ### 功能

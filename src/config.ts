@@ -143,8 +143,9 @@ function normalizeEndpoint(raw: unknown): CustomEndpoint | null {
 		contextWindow: num(e.contextWindow),
 		toolCalling: e.toolCalling === undefined ? true : Boolean(e.toolCalling),
 		imageInput: e.imageInput === true,
-		thinking: e.thinking === true,
-		sendThinkingParam: e.sendThinkingParam === true,
+		// 默认允许思考（关/高/max 由运行时下拉控制，而不是接入时一刀切）
+		thinking: e.thinking !== false,
+		sendThinkingParam: e.sendThinkingParam !== false,
 		group: str(e.group) || undefined,
 		cost: parseCost(e.cost),
 	};

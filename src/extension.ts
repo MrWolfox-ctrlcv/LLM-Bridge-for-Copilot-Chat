@@ -157,8 +157,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 					sendThinkingParam: true,
 					cost: deepseekCost,
 				},
-				mimo: { baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1', name: 'MiMo Token Plan', thinking: true },
-				'mimo-official': { baseUrl: 'https://api.xiaomimimo.com/v1', name: 'MiMo 官方 API', thinking: true },
+				mimo: { baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1', name: 'MiMo Token Plan', thinking: true, sendThinkingParam: false },
+				'mimo-official': { baseUrl: 'https://api.xiaomimimo.com/v1', name: 'MiMo 官方 API', thinking: true, sendThinkingParam: false },
 				'opencode-zen': { baseUrl: 'https://opencode.ai/zen/v1', name: 'OpenCode Zen' },
 				'opencode-go': { baseUrl: 'https://opencode.ai/zen/go/v1', name: 'OpenCode Go' },
 				openrouter: { baseUrl: 'https://openrouter.ai/api/v1', name: 'OpenRouter' },
@@ -485,23 +485,11 @@ async function addCustomEndpoint(
 		}
 	}
 
-	// 思考模式：预设已指定则直接用；否则询问
-	let thinking = preset?.thinking ?? false;
-	let sendThinkingParam = preset?.sendThinkingParam ?? false;
-	if (preset?.thinking === undefined) {
-		const thinkingPick = await vscode.window.showQuickPick(
-			[
-				{ label: '否（默认）', description: '不发送思考参数', value: false },
-				{ label: '是（OpenAI 兼容思考）', description: '发送 thinking + reasoning_effort（DeepSeek 等）', value: true },
-			],
-			{ title: '该端点模型是否支持思考模式？', placeHolder: '不确定选「否」' }
-		);
-		if (thinkingPick === undefined) {
-			return;
-		}
-		thinking = thinkingPick.value;
-		sendThinkingParam = thinking;
-	}
+	// 思考模式：默认开启（具体强度由 VS Code 选择器中的「思考强度」下拉控制：关/高/最大）。
+	// 不再在接入时询问「是否支持思考」——那会把不支持标记的端点一刀切关掉思考。
+	// 预设可显式覆盖：如 MiMo 不支持 reasoning_effort 参数则 sendThinkingParam:false。
+	const thinking = preset?.thinking ?? true;
+	const sendThinkingParam = preset?.sendThinkingParam ?? true;
 
 	const ctxInput = await vscode.window.showInputBox({
 		title: '上下文窗口（tokens，可留空 = 默认 128K）',

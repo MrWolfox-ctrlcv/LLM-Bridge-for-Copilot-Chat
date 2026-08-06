@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { OpenAIClient } from './client';
 import { getProviderSettings, type ModelConfig } from './config';
 import { buildModels } from './models';
-import { convertMessages, convertTools, countMessageChars, messageChars, safeStringify } from './convert';
+import { convertMessages, convertTools, countMessageChars, safeStringify, type OpenAIMessage } from './convert';
 import { trimMessagesToContext } from './context';
 import { createVisionDescriberGetter, resolveImageMessages } from './vision';
 
@@ -97,13 +97,6 @@ export class LlmBridgeProvider {
 
 		let apiMessages = convertMessages(resolvedMessages, cfg.imageInput);
 
-		// 上下文截断保护：超出窗口时丢弃最早的消息
-		if (cfg.contextWindow > 0) {
-			apiMessages = trimMessagesToContext(apiMessages, cfg.contextWindow, this.charsPerToken);
-		}
-
-		const tools = cfg.toolCalling ? convertTools(options.tools) : undefined;
-
 		// 读取模型选择器中的"思考强度"（none=关闭 / high=标准 / max=深度）
 		const anyOptions = options as unknown as Record<string, unknown>;
 		const modelOptions = (anyOptions.modelOptions ??
@@ -114,6 +107,27 @@ export class LlmBridgeProvider {
 		// 归一化到官方支持的档位（DeepSeek 官方枚举 low/high/max；none 用 thinking:disabled 表达）
 		const effort: 'none' | 'high' | 'max' =
 			rawEffort === 'none' || rawEffort === 'max' ? rawEffort : 'high';
+
+		// 思考模式协议校正（按"实际发送"的 thinking 状态，而非端点配置）：
+		// - 开启思考（enabled/passthrough）：history 中每条 assistant 消息都必须携带
+		//   reasoning_content 字段（空串即可），否则上游 400
+		//   "The `reasoning_content` in the thinking mode must be passed back to the API"；
+		//   VS Code 下发历史时通常不含思考内容，因此为缺失该字段的 assistant 消息补空串。
+		// - 关闭思考（disabled）：assistant 消息不得携带 reasoning_content，否则同样 400。
+		const thinkingMode: ThinkingMode =
+			cfg.thinking && effort !== 'none'
+				? cfg.sendThinkingParam
+					? 'enabled'
+					: 'passthrough'
+				: 'disabled';
+		apiMessages = reconcileReasoningContent(apiMessages, thinkingMode);
+
+		// 上下文截断保护：超出窗口时丢弃最早的消息
+		if (cfg.contextWindow > 0) {
+			apiMessages = trimMessagesToContext(apiMessages, cfg.contextWindow, this.charsPerToken);
+		}
+
+		const tools = cfg.toolCalling ? convertTools(options.tools) : undefined;
 
 		const request = {
 			model: cfg.model,
@@ -179,6 +193,36 @@ export class LlmBridgeProvider {
 	): Promise<number> {
 		return Math.ceil(estimateMessageChars(text) / this.charsPerToken);
 	}
+}
+
+/** 实际发送的 thinking 状态（决定 assistant 历史消息的 reasoning_content 如何校正）。 */
+export type ThinkingMode = 'enabled' | 'disabled' | 'passthrough';
+
+/**
+ * 思考模式协议校正：按实际发送的 thinking 状态统一处理 assistant 历史消息的 reasoning_content。
+ * - enabled：DeepSeek 思考模式下要求每条 assistant 历史消息都必须带该字段（空串即可），
+ *   否则 400：The `reasoning_content` in the thinking mode must be passed back to the API.
+ * - disabled：思考关闭时 assistant 消息不得携带 reasoning_content，否则同样 400。
+ * - passthrough：未发送 thinking 参数（保持通用兼容），字段原样保留。
+ */
+export function reconcileReasoningContent(
+	messages: OpenAIMessage[],
+	mode: ThinkingMode
+): OpenAIMessage[] {
+	return messages.map((m) => {
+		if (m.role !== 'assistant') {
+			return m;
+		}
+		if (mode === 'enabled' && m.reasoning_content === undefined) {
+			return { ...m, reasoning_content: '' };
+		}
+		if (mode === 'disabled' && m.reasoning_content !== undefined) {
+			const rest: OpenAIMessage = { ...m };
+			delete rest.reasoning_content;
+			return rest;
+		}
+		return m;
+	});
 }
 
 function toChatInfo(m: ModelConfig): vscode.LanguageModelChatInformation {
@@ -290,7 +334,7 @@ export function reportUsagePart(
 	};
 	try {
 		progress.report(
-			new vscode.LanguageModelDataPart(new TextEncoder().encode(JSON.stringify(data)), USAGE_DATA_PART_MIME)
+			new vscode.LanguageModelDataPart(Buffer.from(JSON.stringify(data)), USAGE_DATA_PART_MIME)
 		);
 	} catch {
 		// 运行时 API 不支持该 part 时静默忽略，不影响主流程
