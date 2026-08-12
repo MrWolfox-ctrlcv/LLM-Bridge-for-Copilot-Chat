@@ -71,20 +71,10 @@
 		"configuration": {
 			"title": "LLM Bridge",
 			"properties": {
-				"llm-bridge.deepseekApiKey": {
-					"type": "string",
-					"default": "",
-					"markdownDescription": "DeepSeek API Key（**旧版配置，已废弃**）。推荐用命令「LLM Bridge: 添加模型（预设）」填写，Key 会安全存入系统钥匙串（SecretStorage）。升级后旧值会自动迁移。"
-				},
-				"llm-bridge.mimoApiKey": {
-					"type": "string",
-					"default": "",
-					"markdownDescription": "小米 MiMo Token（**旧版配置，已废弃**）。推荐用命令「LLM Bridge: 添加模型（预设）」填写，Token 会安全存入系统钥匙串（SecretStorage）。升级后旧值会自动迁移。"
-				},
 				"llm-bridge.endpoints": {
 					"type": "array",
 					"default": [],
-					"markdownDescription": "OpenAI 兼容端点列表（支持多个，同一供应商勾选的多个模型共享一个 Key）。每项字段：`id`、`name`、`baseUrl`、`model`、`contextWindow`（0 = 128K）、`toolCalling`、`imageInput`、`thinking`（是否支持思考模式）、`sendThinkingParam`、`group`（共享 Key 的组 id）。推荐用命令「LLM Bridge: 添加模型」填写：填 Key 后自动拉取模型列表勾选。",
+					"markdownDescription": "OpenAI 兼容端点列表（支持多个，同一供应商勾选的多个模型共享一个 Key）。\n\n**推荐使用命令添加，无需手填此数组**：[LLM Bridge: 添加模型（预设）](command:llm-bridge.addModel) · [LLM Bridge: 管理模型](command:llm-bridge.manageModels)\n\n每项字段：`id`、`name`、`baseUrl`、`model`、`contextWindow`（0 = 128K）、`toolCalling`、`imageInput`、`thinking`、`sendThinkingParam`、`group`（共享 Key 的组 id）。",
 					"items": {
 						"type": "object",
 						"default": {},
@@ -114,26 +104,6 @@
 						}
 					}
 				},
-				"llm-bridge.openaiBaseUrl": {
-					"type": "string",
-					"default": "",
-					"markdownDescription": "自定义 OpenAI 端点 baseUrl（**旧版单槽配置，已废弃**）。请改用 `llm-bridge.endpoints` 数组（支持多个端点），旧值会自动迁移为一个端点。"
-				},
-				"llm-bridge.openaiApiKey": {
-					"type": "string",
-					"default": "",
-					"markdownDescription": "自定义端点 API Key（**旧版配置，已废弃**）。已迁移到系统钥匙串，此配置不再使用。"
-				},
-				"llm-bridge.openaiModel": {
-					"type": "string",
-					"default": "",
-					"markdownDescription": "自定义 OpenAI 端点的模型 ID（**旧版单槽配置，已废弃**）。请改用 `llm-bridge.endpoints` 数组。"
-				},
-				"llm-bridge.openaiContextWindow": {
-					"type": "number",
-					"default": 0,
-					"description": "自定义 OpenAI 端点的上下文窗口（旧版配置，已废弃；请改用 endpoints 数组）。"
-				},
 				"llm-bridge.contextWindow": {
 					"type": "number",
 					"default": 0,
@@ -142,7 +112,7 @@
 				"llm-bridge.visionModel": {
 					"type": "string",
 					"default": "",
-					"description": "视觉代理模型（vendor/id），留空自动选择已安装的第一个可用视觉模型（仅纯文本模型看图用；多模态模型原生收图不受影响）"
+					"markdownDescription": "视觉代理模型（vendor/id），留空自动选择第一个可用视觉模型（仅纯文本模型看图用；多模态模型原生收图不受影响）。\n\n[配置视觉代理模型](command:llm-bridge.setVisionModel)"
 				},
 				"llm-bridge.visionPrompt": {
 					"type": "string",

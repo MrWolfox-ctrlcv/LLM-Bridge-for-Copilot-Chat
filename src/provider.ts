@@ -4,7 +4,7 @@ import { getProviderSettings, type ModelConfig } from './config';
 import { buildModels } from './models';
 import { convertMessages, convertTools, countMessageChars, safeStringify, type OpenAIMessage } from './convert';
 import { trimMessagesToContext } from './context';
-import { createVisionDescriberGetter, resolveImageMessages } from './vision';
+import { createVisionDescriberGetter, isImageDataPart, resolveImageMessages } from './vision';
 
 /**
  * LLM Bridge Chat Provider —— 实现 vscode.LanguageModelChatProvider，
@@ -24,10 +24,11 @@ export class LlmBridgeProvider {
 	private isActive = true;
 
 	/** 视觉代理：仅服务于纯文本模型（多模态模型直接原生收图）。 */
-	private readonly visionGetter = createVisionDescriberGetter();
+	private readonly visionGetter: ReturnType<typeof createVisionDescriberGetter>;
 
 	constructor(context: vscode.ExtensionContext) {
 		this.context = context;
+		this.visionGetter = createVisionDescriberGetter(context);
 		context.subscriptions.push(this.onDidChangeEmitter);
 	}
 
@@ -87,7 +88,9 @@ export class LlmBridgeProvider {
 
 		// 多模态模型（如 MiMo v2.5）原生收图，跳过视觉代理；纯文本模型走视觉代理
 		let resolvedMessages = messages;
-		if (!cfg.imageInput) {
+		if (!cfg.imageInput && messages.some((m) => m.content.some(isImageDataPart))) {
+			// 视觉描述需要一次额外的 LLM 往返，可能耗时数秒；先给用户即时反馈，避免"看似卡死"
+			progress.report(new vscode.LanguageModelTextPart('[LLM Bridge] 正在调用视觉代理解析图片…'));
 			const resolved = await resolveImageMessages(messages, token, () => this.visionGetter.get());
 			resolvedMessages = resolved.messages;
 			if (resolved.notice) {

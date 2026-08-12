@@ -350,9 +350,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			);
 		}),
 		vscode.commands.registerCommand('llm-bridge.setVisionModel', async () => {
-			const options = await listVisionModelOptions();
+			const options = await listVisionModelOptions(context);
 			if (options.length === 0) {
-				void vscode.window.showWarningMessage('[LLM Bridge] 当前没有可用的视觉模型（需要支持图片输入的模型）。');
+				void vscode.window.showWarningMessage(
+					'[LLM Bridge] 当前没有可用的视觉模型。请先配置一个支持图片输入的模型（如 MiMo v2.5，端点勾选 imageInput），或确认已安装支持视觉的模型。'
+				);
 				return;
 			}
 			const config = vscode.workspace.getConfiguration('llm-bridge');

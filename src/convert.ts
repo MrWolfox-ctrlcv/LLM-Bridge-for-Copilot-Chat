@@ -157,7 +157,7 @@ function isImageDataPart(part: unknown): part is vscode.LanguageModelDataPart {
 	);
 }
 
-function imageToDataUrl(part: vscode.LanguageModelDataPart): string {
+export function imageToDataUrl(part: vscode.LanguageModelDataPart): string {
 	return `data:${part.mimeType};base64,${Buffer.from(part.data).toString('base64')}`;
 }
 
