@@ -101,15 +101,7 @@ export class LlmBridgeProvider {
 		let apiMessages = convertMessages(resolvedMessages, cfg.imageInput);
 
 		// 读取模型选择器中的"思考强度"（none=关闭 / high=标准 / max=深度）
-		const anyOptions = options as unknown as Record<string, unknown>;
-		const modelOptions = (anyOptions.modelOptions ??
-			anyOptions.modelConfiguration ??
-			anyOptions.configuration) as Record<string, unknown> | undefined;
-		const rawEffort =
-			typeof modelOptions?.reasoningEffort === 'string' ? modelOptions.reasoningEffort : 'high';
-		// 归一化到官方支持的档位（DeepSeek 官方枚举 low/high/max；none 用 thinking:disabled 表达）
-		const effort: 'none' | 'high' | 'max' =
-			rawEffort === 'none' || rawEffort === 'max' ? rawEffort : 'high';
+		const effort = resolveThinkingEffort(options);
 
 		// 思考模式协议校正（按"实际发送"的 thinking 状态，而非端点配置）：
 		// - 开启思考（enabled/passthrough）：history 中每条 assistant 消息都必须携带
@@ -200,6 +192,27 @@ export class LlmBridgeProvider {
 
 /** 实际发送的 thinking 状态（决定 assistant 历史消息的 reasoning_content 如何校正）。 */
 export type ThinkingMode = 'enabled' | 'disabled' | 'passthrough';
+
+/**
+ * 解析模型选择器中的"思考强度"（none=关闭 / high=标准 / max=深度）。
+ *
+ * 关键：VS Code 把模型选择器的配置放在 `modelConfiguration`（提案字段，= 调用方的
+ * `options.configuration`），而 `modelOptions` 是标准字段（至少为 `{}`，通常只含遥测
+ * 等数据，不含 reasoningEffort）。若先读 modelOptions 会因它永远非空而短路，导致
+ * 思考强度下拉完全失效（恒为默认档位）。读取顺序：modelConfiguration → configuration
+ * → modelOptions（兜底）。
+ */
+export function resolveThinkingEffort(
+	options: vscode.ProvideLanguageModelChatResponseOptions
+): 'none' | 'high' | 'max' {
+	const anyOptions = options as unknown as Record<string, unknown>;
+	const config = (anyOptions.modelConfiguration ??
+		anyOptions.configuration ??
+		anyOptions.modelOptions) as Record<string, unknown> | undefined;
+	const rawEffort = typeof config?.reasoningEffort === 'string' ? config.reasoningEffort : 'high';
+	// 归一化到官方支持的档位（DeepSeek 官方枚举 low/high/max；none 用 thinking:disabled 表达）
+	return rawEffort === 'none' || rawEffort === 'max' ? rawEffort : 'high';
+}
 
 /**
  * 思考模式协议校正：按实际发送的 thinking 状态统一处理 assistant 历史消息的 reasoning_content。

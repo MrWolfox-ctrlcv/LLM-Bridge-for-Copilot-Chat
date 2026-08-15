@@ -38,7 +38,7 @@ vi.mock('vscode', () => {
 
 import * as vscode from 'vscode';
 
-import { estimateMessageChars, reconcileReasoningContent, reportUsagePart } from '../src/provider';
+import { estimateMessageChars, reconcileReasoningContent, reportUsagePart, resolveThinkingEffort } from '../src/provider';
 
 interface ReportedPart {
 	mimeType: string;
@@ -129,6 +129,39 @@ describe('reconcileReasoningContent（思考模式 reasoning_content 协议校�
 			{ role: 'assistant', content: '答案2' },
 		];
 		expect(reconcileReasoningContent(input, 'passthrough')).toEqual(input);
+	});
+});
+
+describe('resolveThinkingEffort（模型选择器思考强度解析）', () => {
+	function opts(config?: unknown, modelOptions?: unknown): never {
+		return { modelConfiguration: config, modelOptions } as never;
+	}
+
+	it('优先读取 modelConfiguration.reasoningEffort（VS Code 传配置的字段）', () => {
+		expect(resolveThinkingEffort(opts({ reasoningEffort: 'none' }))).toBe('none');
+		expect(resolveThinkingEffort(opts({ reasoningEffort: 'max' }))).toBe('max');
+		expect(resolveThinkingEffort(opts({ reasoningEffort: 'high' }))).toBe('high');
+	});
+
+	it('回归：modelOptions 非空但不含 reasoningEffort 时仍读取 modelConfiguration', () => {
+		// modelOptions 是标准字段（至少 { }，通常含 _telemetryTurn 等遥测），永远非空且不含
+		// reasoningEffort；旧实现因 modelOptions 短路导致永远读不到选择器配置（恒为 high）
+		expect(resolveThinkingEffort(opts({ reasoningEffort: 'none' }, { _telemetryTurn: 3 }))).toBe('none');
+		expect(resolveThinkingEffort(opts({ reasoningEffort: 'max' }, {}))).toBe('max');
+	});
+
+	it('回退：无 modelConfiguration 时读 configuration，再回退 modelOptions', () => {
+		expect(resolveThinkingEffort({ configuration: { reasoningEffort: 'none' } } as never)).toBe('none');
+		expect(resolveThinkingEffort({ modelOptions: { reasoningEffort: 'max' } } as never)).toBe('max');
+	});
+
+	it('无任何配置时默认 high', () => {
+		expect(resolveThinkingEffort({} as never)).toBe('high');
+		expect(resolveThinkingEffort({ modelOptions: {} } as never)).toBe('high');
+	});
+
+	it('不支持的档位（如 low）归一化为 high', () => {
+		expect(resolveThinkingEffort(opts({ reasoningEffort: 'low' }))).toBe('high');
 	});
 });
 

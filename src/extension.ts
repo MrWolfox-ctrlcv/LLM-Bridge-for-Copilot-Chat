@@ -1,11 +1,14 @@
 import * as vscode from 'vscode';
+import * as os from 'os';
+import * as path from 'path';
 import { getProviderSettings, type CustomEndpoint, type ModelCost } from './config';
 import { buildModels } from './models';
 import { queryBalance } from './balance';
 import { LlmBridgeProvider } from './provider';
 import { listVisionModelOptions } from './vision';
-import { SECRET_KEYS, endpointSecretKey, migrateLegacyKeys, readApiKey } from './keys';
+import { SECRET_KEYS, endpointSecretKey, invalidateApiKeyCache, migrateLegacyKeys, parseKeyImportFile, readApiKey } from './keys';
 import { OpenAIClient } from './client';
+import { SettingsPanel } from './settingsPanel';
 
 /** LLM Bridge 诊断输出面板（排查问题用，可在「输出」面板查看）。 */
 const output = vscode.window.createOutputChannel('LLM Bridge');
@@ -70,8 +73,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 				void vscode.window.showErrorMessage(`[LLM Bridge] ${ep.name} 连通失败：${msg}`);
 			}
 		}),
-		vscode.commands.registerCommand('llm-bridge.openSettings', () => {
-			void vscode.commands.executeCommand('workbench.action.openSettings', '@ext:local.llm-bridge');
+		vscode.commands.registerCommand('llm-bridge.openSettingsPanel', () => SettingsPanel.createOrShow(context)),
+		// 旧命令 id 保留为打开面板的别名（向后兼容 keybinding 等引用）
+		vscode.commands.registerCommand('llm-bridge.openSettings', () => SettingsPanel.createOrShow(context)),
+		// 打开原生 VS Code 设置页（@ext:llm-bridge 过滤），供高级用户直接编辑 JSON；不进命令面板
+		vscode.commands.registerCommand('llm-bridge.openNativeSettings', () => {
+			const bridgeExt = vscode.extensions.all.find((e) => e.packageJSON?.name === 'llm-bridge');
+			const id = bridgeExt?.id ?? 'wolfox-labs.llm-bridge';
+			void vscode.commands.executeCommand('workbench.action.openSettings', `@ext:${id}`);
 		}),
 		vscode.commands.registerCommand('llm-bridge.addModel', async () => {
 			const config = vscode.workspace.getConfiguration('llm-bridge');
@@ -378,14 +387,64 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			provider.resetVision();
 			void vscode.window.showInformationMessage(`[LLM Bridge] 视觉代理模型已设为: ${picked.detail}`);
 		}),
+		vscode.commands.registerCommand('llm-bridge.importApiKeys', async () => {
+			// 从本地备份文件恢复 API Key 到系统钥匙串（SecretStorage）。
+			// 备份文件格式：{ groupId: apiKey }（groupId 为端点 group 或端点 id）。
+			// 用途：扩展署名/ID 迁移后（如 local → wolfox-labs）SecretStorage 不随扩展迁移，
+			// 用此命令从备份 JSON 一次性恢复，避免手动重新输入。
+			const defaultUri = vscode.Uri.file(path.join(os.homedir(), 'llm-bridge-import-keys.json'));
+			const picked = await vscode.window.showOpenDialog({
+				title: 'LLM Bridge: 选择 API Key 备份文件（JSON）',
+				canSelectFiles: true,
+				canSelectMany: false,
+				defaultUri,
+				filters: { JSON: ['json'] },
+			});
+			if (!picked || picked.length === 0) {
+				return;
+			}
+			const uri = picked[0];
+			let entries: Record<string, string>;
+			try {
+				const bytes = await vscode.workspace.fs.readFile(uri);
+				entries = parseKeyImportFile(new TextDecoder().decode(bytes));
+			} catch (error) {
+				void vscode.window.showErrorMessage(
+					`[LLM Bridge] 无法读取备份文件：${error instanceof Error ? error.message : String(error)}`
+				);
+				return;
+			}
+			let imported = 0;
+			for (const [groupId, key] of Object.entries(entries)) {
+				await context.secrets.store(endpointSecretKey(groupId), key);
+				imported++;
+			}
+			if (imported === 0) {
+				void vscode.window.showWarningMessage('[LLM Bridge] 备份文件中没有有效的 API Key 条目');
+				return;
+			}
+			provider.refreshModelPicker();
+			const action = await vscode.window.showWarningMessage(
+				`[LLM Bridge] 已导入 ${imported} 个 API Key 到系统钥匙串。是否删除备份文件？`,
+				{ modal: false },
+				'删除'
+			);
+			if (action === '删除') {
+				await vscode.workspace.fs.delete(uri);
+			}
+		}),
 		vscode.workspace.onDidChangeConfiguration((e) => {
 			if (e.affectsConfiguration('llm-bridge')) {
+				invalidateApiKeyCache();
 				provider.refreshModelPicker();
 				provider.resetVision();
 			}
 		}),
 		// 多窗口同步：另一窗口增删 SecretStorage 中的 Key 时刷新本窗口模型选择器
-		context.secrets.onDidChange(() => provider.refreshModelPicker())
+		context.secrets.onDidChange(() => {
+			invalidateApiKeyCache();
+			provider.refreshModelPicker();
+		})
 	);
 
 	// 先激活 Copilot Chat 再刷新模型选择器：确保 configurationSchema（思考强度下拉）等
@@ -598,6 +657,7 @@ async function migrateLegacyProviders(context: vscode.ExtensionContext): Promise
 
 		if (changed) {
 			await config.update('endpoints', next, vscode.ConfigurationTarget.Global);
+			invalidateApiKeyCache();
 		}
 	} catch (error) {
 		// 迁移失败不阻塞启动：写日志，仅首次弹通知引导用户重新添加（避免每次启动打扰）

@@ -76,14 +76,27 @@ async function parseEndpoints(
 	const endpoints: CustomEndpoint[] = [];
 	for (const item of raw) {
 		const ep = normalizeEndpoint(item);
-		if (!ep) {
-			continue;
+		if (ep) {
+			endpoints.push(ep);
 		}
+	}
+	// 并行读取 Key：先收集所有唯一 secret key（group 与 id 去重），再一次性并行读取。
+	// 避免对同一 group 的多个端点重复、串行访问 SecretStorage（Windows 上每次都是
+	// IPC + DPAPI，串行会明显拖慢模型选择器/请求加载）。
+	const uniqueKeys = new Set<string>();
+	for (const ep of endpoints) {
+		uniqueKeys.add(endpointSecretKey(ep.group || ep.id));
+		uniqueKeys.add(endpointSecretKey(ep.id));
+	}
+	const keyValues = await Promise.all(
+		[...uniqueKeys].map(async (k) => [k, await readApiKey(context, k)] as const)
+	);
+	const keyMap = new Map(keyValues);
+	for (const ep of endpoints) {
 		// 组 Key 优先（同供应商一批模型共享），其次自身 id 的 Key（旧格式），最后配置内联
-		const groupKey = await readApiKey(context, endpointSecretKey(ep.group || ep.id));
-		const legacyKey = await readApiKey(context, endpointSecretKey(ep.id));
+		const groupKey = keyMap.get(endpointSecretKey(ep.group || ep.id)) ?? '';
+		const legacyKey = keyMap.get(endpointSecretKey(ep.id)) ?? '';
 		ep.apiKey = ep.apiKey || legacyKey || groupKey;
-		endpoints.push(ep);
 	}
 	// 兼容旧版单槽配置：endpoints 为空但 openaiBaseUrl + openaiModel 已填时，自动转换为一个端点
 	if (endpoints.length === 0) {

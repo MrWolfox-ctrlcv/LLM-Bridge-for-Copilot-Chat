@@ -1,11 +1,7 @@
 {
 	"displayName": "LLM Bridge for Copilot Chat",
 	"description": "将 Copilot Chat 路由到任意 OpenAI 兼容端点：本地模型（llama.cpp / Ollama / LM Studio）与云端 API（DeepSeek / Qwen / GLM / Kimi / 豆包 / MiMo...）。多模型、每个模型独立 baseUrl 与 API Key。",
-	"command.llm-bridge.refreshModels.title": "LLM Bridge: 刷新模型列表",
-	"command.llm-bridge.openSettings.title": "LLM Bridge: 打开模型设置",
-	"command.llm-bridge.checkBalance.title": "LLM Bridge: 查询余额",
-	"command.llm-bridge.setVisionModel.title": "LLM Bridge: 配置视觉代理模型",
+	"command.llm-bridge.openSettingsPanel.title": "LLM Bridge: 设置",
 	"command.llm-bridge.addModel.title": "LLM Bridge: 添加模型（预设）",
-	"command.llm-bridge.manageModels.title": "LLM Bridge: 管理模型",
-	"command.llm-bridge.testConnection.title": "LLM Bridge: 测试连通性"
+	"command.llm-bridge.refreshModels.title": "LLM Bridge: 刷新模型列表"
 }

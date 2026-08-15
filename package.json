@@ -2,7 +2,7 @@
 	"name": "llm-bridge",
 	"displayName": "%displayName%",
 	"description": "%description%",
-	"version": "0.3.6",
+	"version": "0.3.9",
 	"publisher": "local",
 	"license": "MIT",
 	"repository": {
@@ -40,34 +40,27 @@
 		],
 		"commands": [
 			{
-				"command": "llm-bridge.refreshModels",
-				"title": "%command.llm-bridge.refreshModels.title%"
-			},
-			{
-				"command": "llm-bridge.openSettings",
-				"title": "%command.llm-bridge.openSettings.title%"
-			},
-			{
-				"command": "llm-bridge.checkBalance",
-				"title": "%command.llm-bridge.checkBalance.title%"
-			},
-			{
-				"command": "llm-bridge.setVisionModel",
-				"title": "%command.llm-bridge.setVisionModel.title%"
+				"command": "llm-bridge.openSettingsPanel",
+				"title": "%command.llm-bridge.openSettingsPanel.title%"
 			},
 			{
 				"command": "llm-bridge.addModel",
 				"title": "%command.llm-bridge.addModel.title%"
 			},
 			{
-				"command": "llm-bridge.manageModels",
-				"title": "%command.llm-bridge.manageModels.title%"
-			},
-			{
-				"command": "llm-bridge.testConnection",
-				"title": "%command.llm-bridge.testConnection.title%"
+				"command": "llm-bridge.refreshModels",
+				"title": "%command.llm-bridge.refreshModels.title%"
 			}
 		],
+		"menus": {
+			"view/title": [
+				{
+					"command": "llm-bridge.openSettingsPanel",
+					"when": "view == chatView",
+					"group": "navigation"
+				}
+			]
+		},
 		"configuration": {
 			"title": "LLM Bridge",
 			"properties": {
